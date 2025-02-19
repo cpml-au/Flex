@@ -30,7 +30,7 @@ gp:
   primitives:
     imports:
       {
-        "alpine.gp.jax_primitives": ["jax_primitives"],
+        # "alpine.gp.jax_primitives": ["jax_primitives"],
         "alpine.gp.numpy_primitives": ["numpy_primitives"],
       }
     used: [

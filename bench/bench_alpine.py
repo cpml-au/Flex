@@ -22,6 +22,8 @@ import re
 from sklearn.metrics import r2_score
 from datasets import generate_dataset
 
+import mygrad as mg
+
 num_cpus = 1
 num_runs = 10  # 20
 
@@ -84,11 +86,7 @@ def eval_MSE_and_tune_constants(tree, toolbox, D):
 
             return total_err
 
-        # objective = partial(eval_MSE, num_variables=num_variables)
-        # objective = partial(jit(eval_MSE, static_argnums=(1,)), D=D)
         objective = eval_MSE
-
-        # obj_grad = partial(jit(grad(eval_MSE), static_argnums=(1,)), D=D)
 
         x0 = np.ones(num_consts)
 
@@ -98,8 +96,11 @@ def eval_MSE_and_tune_constants(tree, toolbox, D):
                 # return [total_err + 0.*(np.linalg.norm(x, 2))**2]
                 return [total_err]
 
-            # def gradient(self, x):
-            #     return obj_grad(x)
+            def gradient(self, x):
+                xt = mg.tensor(x)
+                f = self.fitness(xt)[0]
+                f.backward()
+                return xt.grad
 
             def get_bounds(self):
                 return (-5.0 * np.ones(num_consts), 5.0 * np.ones(num_consts))
@@ -117,13 +118,13 @@ def eval_MSE_and_tune_constants(tree, toolbox, D):
 
         # PYGMO SOLVER
         prb = pg.problem(fitting_problem())
-        # algo = pg.algorithm(pg.nlopt(solver="lbfgs"))
-        # algo.extract(pg.nlopt).maxeval = 10
+        algo = pg.algorithm(pg.nlopt(solver="lbfgs"))
+        algo.extract(pg.nlopt).maxeval = 10
         # algo = pg.algorithm(pg.cmaes(gen=70))
-        algo = pg.algorithm(pg.pso(gen=10))
+        # algo = pg.algorithm(pg.pso(gen=10))
         # algo = pg.algorithm(pg.sea(gen=70))
-        pop = pg.population(prb, size=70)
-        # pop = pg.population(prb, size=1)
+        # pop = pg.population(prb, size=70)
+        pop = pg.population(prb, size=1)
         pop.push_back(x0)
         pop = algo.evolve(pop)
         MSE = pop.champion_f[0]
@@ -336,7 +337,7 @@ if __name__ == "__main__":
         "Nguyen-11",
         "Nguyen-12",
         "Nguyen-13",
-        "strogatz_glider1",
+        # "strogatz_glider1",
     ]
 
     # problems = ["C1"]
