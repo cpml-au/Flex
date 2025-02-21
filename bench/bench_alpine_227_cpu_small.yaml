@@ -26,6 +26,7 @@ gp:
     fun: gp.cxOnePoint
     kargs: "{}"
   immigration: { "enabled": False, "freq": 80, "frac": 0.95 }
+  scaleXy: True
   primitives:
     imports:
       {

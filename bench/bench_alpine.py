@@ -1,8 +1,6 @@
 # import matplotlib.pyplot as plt
 from deap import gp
 
-# from dctkit import config
-# from dctkit.math.opt import optctrl as oc
 from alpine.gp import gpsymbreg as gps
 from alpine.data import Dataset
 from alpine.gp import util
@@ -10,14 +8,11 @@ import numpy as np
 import ray
 import yaml
 
-# import jax.numpy as jnp
 import time
 
-# from jax import jit, grad
 import warnings
 import pygmo as pg
 
-# from functools import partial
 import re
 from sklearn.metrics import r2_score
 from datasets import generate_dataset
@@ -26,8 +21,6 @@ import mygrad as mg
 
 num_cpus = 1
 num_runs = 10  # 20
-
-# config()
 
 
 def check_trig_fn(ind):
@@ -75,7 +68,6 @@ def eval_MSE_and_tune_constants(tree, toolbox, D):
     individual, num_consts = compile_individual_with_consts(tree, toolbox)
 
     if num_consts > 0:
-        # config()
 
         # TODO: do we really need to redefine this function instead of using the one
         # outside?
@@ -105,17 +97,6 @@ def eval_MSE_and_tune_constants(tree, toolbox, D):
             def get_bounds(self):
                 return (-5.0 * np.ones(num_consts), 5.0 * np.ones(num_consts))
 
-        # DCTKIT OPTIMIZATION INTERFACE
-        # def get_bounds():
-        #     return (-5.*np.ones(n_constants), 5.*np.ones(n_constants))
-
-        # prb = oc.OptimizationProblem(
-        #     dim=n_constants, state_dim=n_constants, objfun=objective)
-        # prb.get_bounds = get_bounds
-        # prb.set_obj_args({})
-        # best_consts = prb.solve(x0, algo="lbfgs")
-        # best_fit = objective(best_consts)
-
         # PYGMO SOLVER
         prb = pg.problem(fitting_problem())
         algo = pg.algorithm(pg.nlopt(solver="lbfgs"))
@@ -129,7 +110,7 @@ def eval_MSE_and_tune_constants(tree, toolbox, D):
         pop = algo.evolve(pop)
         MSE = pop.champion_f[0]
         consts = pop.champion_x
-        # print(pop.problem.get_fevals())
+
         if np.isinf(MSE) or np.isnan(MSE):
             MSE = 1e8
     else:
@@ -211,7 +192,7 @@ def assign_attributes(individuals, attributes):
 
 
 def alpine_bench(problem="Nguyen-8"):
-    if problem == "Nguyen-13" or problem == "strogatz_glider1":
+    if problem == "Nguyen-13":
         with open("bench_alpine_Nguyen13.yaml") as config_file:
             config_file_data = yaml.safe_load(config_file)
     elif problem == "227_cpu_small":
@@ -224,8 +205,19 @@ def alpine_bench(problem="Nguyen-8"):
         with open("bench_alpine.yaml") as config_file:
             config_file_data = yaml.safe_load(config_file)
 
+    scaleXy = config_file_data["gp"]["scaleXy"]
+
     # generate training and test datasets
-    X_train, y_train, X_test, y_test, num_variables = generate_dataset(problem)
+    (
+        X_train_scaled,
+        y_train_scaled,
+        X_test_scaled,
+        y_test,
+        scaler_X,
+        scaler_y,
+        num_variables,
+        _,
+    ) = generate_dataset(problem, scaleXy=scaleXy)
 
     if num_variables == 1:
         pset = gp.PrimitiveSetTyped("Main", [float], float)
@@ -237,15 +229,11 @@ def alpine_bench(problem="Nguyen-8"):
     else:
         pset = gp.PrimitiveSetTyped("Main", [float] * num_variables, float)
 
-    batch_size = 1000
+    batch_size = 200
     callback_func = assign_attributes
     fitness_scale = 1.0
 
-    if (
-        problem == "Nguyen-13"
-        or problem == "strogatz_glider1"
-        or problem == "227_cpu_small"
-    ):
+    if problem == "Nguyen-13" or problem == "227_cpu_small":
         batch_size = 10
         config_file_data["gp"]["penalty"]["reg_param"] = 0.0001
         pset.addTerminal(object, float, "a")
@@ -258,9 +246,6 @@ def alpine_bench(problem="Nguyen-8"):
 
     penalty = config_file_data["gp"]["penalty"]
     common_params = {"penalty": penalty, "fitness_scale": fitness_scale}
-    # import re
-
-    # lambda ind: len(re.findall("cos", str(ind)))
 
     gpsr = gps.GPSymbolicRegressor(
         pset=pset,
@@ -278,8 +263,8 @@ def alpine_bench(problem="Nguyen-8"):
         batch_size=batch_size,
     )
 
-    train_data = Dataset("dataset", X_train, y_train)
-    test_data = Dataset("dataset", X_test, y_test)
+    train_data = Dataset("dataset", X_train_scaled, y_train_scaled)
+    test_data = Dataset("dataset", X_test_scaled, y_test)
 
     if num_variables > 1:
         train_data.X = [train_data.X[:, i] for i in range(num_variables)]
@@ -296,11 +281,9 @@ def alpine_bench(problem="Nguyen-8"):
         print("Best parameters = ", gpsr.best.consts)
 
     print("Elapsed time = ", toc - tic)
-    time_per_individual = (toc - tic) / (
-        gpsr.NGEN * gpsr.NINDIVIDUALS * gpsr.num_islands
+    individuals_per_sec = (
+        (gpsr.cgen + 1) * gpsr.NINDIVIDUALS * gpsr.num_islands / (toc - tic)
     )
-    individuals_per_sec = 1 / time_per_individual
-    print("Time per individual = ", time_per_individual)
     print("Individuals per sec = ", individuals_per_sec)
 
     u_best = gpsr.predict(test_data)
@@ -312,7 +295,11 @@ def alpine_bench(problem="Nguyen-8"):
     # plt.plot(y_test, "+")
     # plt.show()
 
-    MSE = np.sum((u_best - y_test) ** 2) / len(u_best)
+    # de-scale outputs before computing errors
+    if scaleXy:
+        u_best = scaler_y.inverse_transform(u_best)
+
+    MSE = np.mean((u_best - y_test) ** 2)
     r2 = r2_score(y_test, u_best)
     print("MSE on the test set = ", MSE)
     print("R^2 on the test set = ", r2)
@@ -337,7 +324,6 @@ if __name__ == "__main__":
         "Nguyen-11",
         "Nguyen-12",
         "Nguyen-13",
-        # "strogatz_glider1",
     ]
 
     # problems = ["C1"]
