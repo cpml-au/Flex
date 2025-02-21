@@ -20,7 +20,7 @@ from datasets import generate_dataset
 import mygrad as mg
 
 num_cpus = 1
-num_runs = 10  # 20
+num_runs = 1  # 20
 
 
 def check_trig_fn(ind):
@@ -191,12 +191,12 @@ def assign_attributes(individuals, attributes):
         ind.fitness.values = attr["fitness"]
 
 
-def alpine_bench(problem="Nguyen-8"):
+def bench(problem="Nguyen-8"):
     if problem == "Nguyen-13":
         with open("bench_alpine_Nguyen13.yaml") as config_file:
             config_file_data = yaml.safe_load(config_file)
-    elif problem == "227_cpu_small":
-        with open("bench_alpine_227_cpu_small.yaml") as config_file:
+    elif problem == "1089_USCrime":
+        with open("bench_alpine_1089_USCrime.yaml") as config_file:
             config_file_data = yaml.safe_load(config_file)
     elif problem == "C1":
         with open("bench_alpine_C1.yaml") as config_file:
@@ -233,9 +233,9 @@ def alpine_bench(problem="Nguyen-8"):
     callback_func = assign_attributes
     fitness_scale = 1.0
 
-    if problem == "Nguyen-13" or problem == "227_cpu_small":
+    if problem == "Nguyen-13" or problem == "1089_USCrime":
         batch_size = 10
-        config_file_data["gp"]["penalty"]["reg_param"] = 0.0001
+        config_file_data["gp"]["penalty"]["reg_param"] = 1e-4
         pset.addTerminal(object, float, "a")
 
     if problem == "C1":
@@ -297,7 +297,7 @@ def alpine_bench(problem="Nguyen-8"):
 
     # de-scale outputs before computing errors
     if scaleXy:
-        u_best = scaler_y.inverse_transform(u_best)
+        u_best = scaler_y.inverse_transform(u_best.reshape(-1, 1)).flatten()
 
     MSE = np.mean((u_best - y_test) ** 2)
     r2 = r2_score(y_test, u_best)
@@ -326,6 +326,9 @@ if __name__ == "__main__":
         "Nguyen-13",
     ]
 
+    # problems = ["Nguyen-12"]
+    # problems = ["1089_USCrime"]
+
     # problems = ["C1"]
 
     ave_success_rate = 0.0
@@ -335,7 +338,7 @@ if __name__ == "__main__":
             success = 0.0
             for i in range(num_runs):
                 print("Problem {prb}, RUN #{num}".format(prb=problem, num=i))
-                success += alpine_bench(problem=problem)
+                success += bench(problem=problem)
             success_rate = success / num_runs * 100
             ave_success_rate += success_rate / len(problems)
             str_to_print = problem + " " + str(success_rate)

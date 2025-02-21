@@ -17,6 +17,7 @@ __pycache__/*
 *.txt
 *.yaml
 !apps/*_template.yaml
+bench/datasets/*
 
 # Project files
 .ropeproject

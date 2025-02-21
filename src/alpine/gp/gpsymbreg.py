@@ -15,83 +15,86 @@ from itertools import chain
 from importlib import import_module
 
 # reducing the number of threads launched by fitness evaluations
-os.environ['MKL_NUM_THREADS'] = '1'
-os.environ['OPENBLAS_NUM_THREADS'] = '1'
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
 
 os.environ["NUM_INTER_THREADS"] = "1"
 os.environ["NUM_INTRA_THREADS"] = "1"
 
-os.environ["XLA_FLAGS"] = ("--xla_cpu_multi_thread_eigen=false "
-                           "intra_op_parallelism_threads=1")
+os.environ["XLA_FLAGS"] = (
+    "--xla_cpu_multi_thread_eigen=false " "intra_op_parallelism_threads=1"
+)
 
 
-class GPSymbolicRegressor():
+class GPSymbolicRegressor:
     """Symbolic regression problem via Genetic Programming.
 
-        Args:
-            pset: set of primitives and terminals (loosely or strongly typed).
-            predict_func: function that returns a prediction given an individual and
-                a test `Dataset` as inputs.
-            toolbox: set to None if `config_file_data` is provided.
-            individualCreator: set to None if `config_file_data` is provided.
-            NINDIVIDUALS: number of individuals in the parent population.
-            NGEN: number of generations.
-            num_islands: number of islands (for a multi-island model).
-            crossover_prob: cross-over probability.
-            MUTPB: mutation probability.
-            frac_elitist: best individuals to keep expressed as a percentage of the
-                population (ex. 0.1 = keep top 10% individuals)
-            overlapping_generation: True if the offspring competes with the parents
-                for survival.
-            plot_history: whether to plot fitness vs generation number.
-            print_log: whether to print the log containing the population statistics
-                during the run.
-            print_best_inds_str: number of best individuals' strings to print after
-                each generation.
-            plot_best: whether to show the plot of the solution corresponding to the
-                best individual every plot_freq generations.
-            plot_freq: frequency (number of generations) of the plot of the best
-                individual.
-            seed: list of individual strings to seed in the initial population.
-            preprocess_func: function to call before evaluating the fitness of the
-                individuals of each generation.
-            callback_func: function to call after evaluating the fitness of the
-                individuals of each generation. It takes the population/batch of
-                individuals and the list containing all the values of the attributes
-                returned by the fitness evaluation function.
+    Args:
+        pset: set of primitives and terminals (loosely or strongly typed).
+        predict_func: function that returns a prediction given an individual and
+            a test `Dataset` as inputs.
+        toolbox: set to None if `config_file_data` is provided.
+        individualCreator: set to None if `config_file_data` is provided.
+        NINDIVIDUALS: number of individuals in the parent population.
+        NGEN: number of generations.
+        num_islands: number of islands (for a multi-island model).
+        crossover_prob: cross-over probability.
+        MUTPB: mutation probability.
+        frac_elitist: best individuals to keep expressed as a percentage of the
+            population (ex. 0.1 = keep top 10% individuals)
+        overlapping_generation: True if the offspring competes with the parents
+            for survival.
+        plot_history: whether to plot fitness vs generation number.
+        print_log: whether to print the log containing the population statistics
+            during the run.
+        print_best_inds_str: number of best individuals' strings to print after
+            each generation.
+        plot_best: whether to show the plot of the solution corresponding to the
+            best individual every plot_freq generations.
+        plot_freq: frequency (number of generations) of the plot of the best
+            individual.
+        seed: list of individual strings to seed in the initial population.
+        preprocess_func: function to call before evaluating the fitness of the
+            individuals of each generation.
+        callback_func: function to call after evaluating the fitness of the
+            individuals of each generation. It takes the population/batch of
+            individuals and the list containing all the values of the attributes
+            returned by the fitness evaluation function.
     """
 
-    def __init__(self,
-                 pset: gp.PrimitiveSet | gp.PrimitiveSetTyped,
-                 fitness: Callable,
-                 error_metric: Callable | None = None,
-                 predict_func: Callable | None = None,
-                 common_data: Dict | None = None,
-                 toolbox: base.Toolbox = None,
-                 individualCreator: gp.PrimitiveTree = None,
-                 NINDIVIDUALS: int = 10,
-                 NGEN: int = 1,
-                 num_islands: int = 1,
-                 crossover_prob: float = 0.5,
-                 MUTPB: float = 0.2,
-                 frac_elitist: float = 0.,
-                 overlapping_generation: bool = False,
-                 validate: bool = False,
-                 preprocess_func: Callable | None = None,
-                 callback_func: Callable | None = None,
-                 seed: List[str] | None = None,
-                 config_file_data: Dict | None = None,
-                 plot_history: bool = False,
-                 print_log: bool = False,
-                 num_best_inds_str: int = 1,
-                 plot_best: bool = False,
-                 plot_freq: int = 5,
-                 plot_best_genealogy: bool = False,
-                 plot_best_individual_tree: bool = False,
-                 save_best_individual: bool = False,
-                 save_train_fit_history: bool = False,
-                 output_path: str | None = None,
-                 batch_size=1):
+    def __init__(
+        self,
+        pset: gp.PrimitiveSet | gp.PrimitiveSetTyped,
+        fitness: Callable,
+        error_metric: Callable | None = None,
+        predict_func: Callable | None = None,
+        common_data: Dict | None = None,
+        toolbox: base.Toolbox = None,
+        individualCreator: gp.PrimitiveTree = None,
+        NINDIVIDUALS: int = 10,
+        NGEN: int = 1,
+        num_islands: int = 1,
+        crossover_prob: float = 0.5,
+        MUTPB: float = 0.2,
+        frac_elitist: float = 0.0,
+        overlapping_generation: bool = False,
+        validate: bool = False,
+        preprocess_func: Callable | None = None,
+        callback_func: Callable | None = None,
+        seed: List[str] | None = None,
+        config_file_data: Dict | None = None,
+        plot_history: bool = False,
+        print_log: bool = False,
+        num_best_inds_str: int = 1,
+        plot_best: bool = False,
+        plot_freq: int = 5,
+        plot_best_genealogy: bool = False,
+        plot_best_individual_tree: bool = False,
+        save_best_individual: bool = False,
+        save_train_fit_history: bool = False,
+        output_path: str | None = None,
+        batch_size=1,
+    ):
 
         self.pset = pset
 
@@ -134,7 +137,7 @@ class GPSymbolicRegressor():
             self.validate = validate
 
             # Elitism settings
-            self.n_elitist = int(frac_elitist*self.NINDIVIDUALS)
+            self.n_elitist = int(frac_elitist * self.NINDIVIDUALS)
 
             self.createIndividual = individualCreator
 
@@ -148,8 +151,9 @@ class GPSymbolicRegressor():
         # Initialize variables for statistics
         self.stats_fit = tools.Statistics(lambda ind: ind.fitness.values)
         self.stats_size = tools.Statistics(len)
-        self.mstats = tools.MultiStatistics(fitness=self.stats_fit,
-                                            size=self.stats_size)
+        self.mstats = tools.MultiStatistics(
+            fitness=self.stats_fit, size=self.stats_size
+        )
         self.mstats.register("avg", lambda ind: np.around(np.mean(ind), 4))
         self.mstats.register("std", lambda ind: np.around(np.std(ind), 4))
         self.mstats.register("min", lambda ind: np.around(np.min(ind), 4))
@@ -190,8 +194,7 @@ class GPSymbolicRegressor():
         mutate_fun = config_file_data["gp"]["mutate"]["fun"]
         mutate_kargs = eval(config_file_data["gp"]["mutate"]["kargs"])
 
-        self.toolbox.register("mutate",
-                              eval(mutate_fun), **mutate_kargs)
+        self.toolbox.register("mutate", eval(mutate_fun), **mutate_kargs)
 
         # CROSSOVER
         crossover_fun = config_file_data["gp"]["crossover"]["fun"]
@@ -199,31 +202,36 @@ class GPSymbolicRegressor():
 
         self.toolbox.register("mate", eval(crossover_fun), **crossover_kargs)
         self.toolbox.decorate(
-            "mate", gp.staticLimit(key=operator.attrgetter("height"), max_value=17))
+            "mate", gp.staticLimit(key=operator.attrgetter("height"), max_value=17)
+        )
         self.toolbox.decorate(
-            "mutate", gp.staticLimit(key=operator.attrgetter("height"), max_value=17))
+            "mutate", gp.staticLimit(key=operator.attrgetter("height"), max_value=17)
+        )
 
         # INDIVIDUAL GENERATOR/CREATOR
         min_ = config_file_data["gp"]["min_"]
         max_ = config_file_data["gp"]["max_"]
-        self.toolbox.register("expr", gp.genHalfAndHalf,
-                              pset=self.pset, min_=min_, max_=max_)
-        self.toolbox.register("expr_pop",
-                              gp.genHalfAndHalf,
-                              pset=self.pset,
-                              min_=min_,
-                              max_=max_,
-                              is_pop=True)
-        creator.create("FitnessMin", base.Fitness, weights=(-1.0, ))
-        creator.create("Individual",
-                       gp.PrimitiveTree,
-                       fitness=creator.FitnessMin)
+        self.toolbox.register(
+            "expr", gp.genHalfAndHalf, pset=self.pset, min_=min_, max_=max_
+        )
+        self.toolbox.register(
+            "expr_pop",
+            gp.genHalfAndHalf,
+            pset=self.pset,
+            min_=min_,
+            max_=max_,
+            is_pop=True,
+        )
+        creator.create("FitnessMin", base.Fitness, weights=(-1.0,))
+        creator.create("Individual", gp.PrimitiveTree, fitness=creator.FitnessMin)
         createIndividual = creator.Individual
-        self.toolbox.register("individual", tools.initIterate,
-                              createIndividual, self.toolbox.expr)
+        self.toolbox.register(
+            "individual", tools.initIterate, createIndividual, self.toolbox.expr
+        )
 
-        self.toolbox.register("population", tools.initRepeat,
-                              list, self.toolbox.individual)
+        self.toolbox.register(
+            "population", tools.initRepeat, list, self.toolbox.individual
+        )
         self.toolbox.register("compile", gp.compile, pset=self.pset)
 
         self.createIndividual = createIndividual
@@ -237,7 +245,7 @@ class GPSymbolicRegressor():
         self.mig_frac = config_file_data["gp"]["multi_island"]["migration"]["frac"]
         self.crossover_prob = config_file_data["gp"]["crossover_prob"]
         self.MUTPB = config_file_data["gp"]["MUTPB"]
-        self.n_elitist = int(config_file_data["gp"]["frac_elitist"]*self.NINDIVIDUALS)
+        self.n_elitist = int(config_file_data["gp"]["frac_elitist"] * self.NINDIVIDUALS)
         self.overlapping_generation = config_file_data["gp"]["overlapping_generation"]
 
         # generate primitives collection
@@ -250,8 +258,10 @@ class GPSymbolicRegressor():
                 primitives_collection = primitives_collection | primitive
 
         add_primitives_to_pset(
-            self.pset, config_file_data["gp"]['primitives']["used"],
-            primitives_collection)
+            self.pset,
+            config_file_data["gp"]["primitives"]["used"],
+            primitives_collection,
+        )
 
         self.__creator_toolbox_config(config_file_data=config_file_data)
 
@@ -268,7 +278,7 @@ class GPSymbolicRegressor():
         Args:
             data: dictionary containing arguments names and values.
         """
-        self.__store_shared_objects('common', data)
+        self.__store_shared_objects("common", data)
 
     def store_datasets(self, datasets: Dict[str, Dataset]):
         """Store datasets with the corresponding label ("train", "val" or "test")
@@ -322,8 +332,7 @@ class GPSymbolicRegressor():
         if self.validate:
             # compute satistics related to the validation set
             valid_fit, valid_err = self.__compute_valid_stats(pop)
-            record["valid"] = {"valid_fit": valid_fit,
-                               "valid_err": valid_err}
+            record["valid"] = {"valid_fit": valid_fit, "valid_err": valid_err}
 
         self.logbook.record(gen=gen, evals=evals, **record)
 
@@ -346,10 +355,10 @@ class GPSymbolicRegressor():
 
         # Array of generations starts from 1
         x = range(1, len(self.train_fit_history) + 1)
-        plt.plot(x, self.train_fit_history, 'b', label="Training Fitness")
+        plt.plot(x, self.train_fit_history, "b", label="Training Fitness")
         if self.validate:
-            plt.plot(x, self.val_fit_history, 'r', label="Validation Fitness")
-            fig.legend(loc='upper right')
+            plt.plot(x, self.val_fit_history, "r", label="Validation Fitness")
+            fig.legend(loc="upper right")
 
         plt.xlabel("Generation #")
         plt.ylabel("Best Fitness")
@@ -361,11 +370,13 @@ class GPSymbolicRegressor():
     def __plot_genealogy(self, best):
         # Get genealogy of best individual
         import networkx
+
         gen_best = self.history.getGenealogy(best)
         graph = networkx.DiGraph(gen_best)
         graph = graph.reverse()
         pos = networkx.nx_agraph.graphviz_layout(
-            graph, prog="dot", args="-Gsplines=True")
+            graph, prog="dot", args="-Gsplines=True"
+        )
         # Retrieve individual strings for graph node labels
         labels = gen_best.copy()
         for key in labels.keys():
@@ -374,14 +385,15 @@ class GPSymbolicRegressor():
         networkx.draw_networkx(graph, pos=pos)
         label_options = {"ec": "k", "fc": "lightblue", "alpha": 1.0}
         networkx.draw_networkx_labels(
-            graph, pos=pos, labels=labels, font_size=10, bbox=label_options)
+            graph, pos=pos, labels=labels, font_size=10, bbox=label_options
+        )
 
         # Save genealogy to file
         # networkx.nx_agraph.write_dot(graph, "genealogy.dot")
 
     def __register_fitness_func(self):
         store = self.data_store
-        args_train = store['common'] | store['train']
+        args_train = store["common"] | store["train"]
         self.toolbox.register("evaluate_train", self.fitness, **args_train)
 
     def __register_val_funcs(self):
@@ -390,27 +402,29 @@ class GPSymbolicRegressor():
         obj space.
         """
         store = self.data_store
-        args_val = store['common'] | store['val']
+        args_val = store["common"] | store["val"]
         self.toolbox.register("evaluate_val_fit", self.fitness, **args_val)
         self.toolbox.register("evaluate_val_MSE", self.error_metric, **args_val)
 
     def __register_score_func(self):
         store = self.data_store
-        args_score_func = store['common'] | store['test']
-        self.toolbox.register("evaluate_test_score",
-                              self.error_metric, **args_score_func)
+        args_score_func = store["common"] | store["test"]
+        self.toolbox.register(
+            "evaluate_test_score", self.error_metric, **args_score_func
+        )
 
     def __register_predict_func(self):
         store = self.data_store
-        args_predict_func = store['common'] | store['test']
-        self.toolbox.register("evaluate_test_sols",
-                              self.predict_func, **args_predict_func)
+        args_predict_func = store["common"] | store["test"]
+        self.toolbox.register(
+            "evaluate_test_sols", self.predict_func, **args_predict_func
+        )
 
     def __register_map(self):
         def mapper(f, individuals, toolbox_ref):
-            fitnesses = []*len(individuals)
+            fitnesses = [] * len(individuals)
             for i in range(0, len(individuals), self.batch_size):
-                individuals_batch = individuals[i:i+self.batch_size]
+                individuals_batch = individuals[i : i + self.batch_size]
                 fitnesses.append(f(individuals_batch, toolbox_ref))
             fitnesses = list(chain(*ray.get(fitnesses)))
             return fitnesses
@@ -421,9 +435,9 @@ class GPSymbolicRegressor():
     def fit(self, train_data: Dataset, val_data: Dataset | None = None):
         """Fits the training data using GP-based symbolic regression."""
         if self.validate and val_data is not None:
-            datasets = {'train': train_data, 'val': val_data}
+            datasets = {"train": train_data, "val": val_data}
         else:
-            datasets = {'train': train_data}
+            datasets = {"train": train_data}
         self.store_datasets(datasets)
         self.__register_fitness_func()
         if self.validate and self.error_metric is not None:
@@ -431,7 +445,7 @@ class GPSymbolicRegressor():
         self.__run()
 
     def predict(self, test_data: Dataset):
-        datasets = {'test': test_data}
+        datasets = {"test": test_data}
         self.store_datasets(datasets)
         self.__register_predict_func()
         u_best = self.toolbox.map(self.toolbox.evaluate_test_sols, (self.best,))[0]
@@ -439,9 +453,9 @@ class GPSymbolicRegressor():
 
     def score(self, test_data: Dataset):
         """Computes the error metric (passed to the `GPSymbolicRegressor` constructor)
-            on a given dataset.
+        on a given dataset.
         """
-        datasets = {'test': test_data}
+        datasets = {"test": test_data}
         self.store_datasets(datasets)
         self.__register_score_func()
         score = self.toolbox.map(self.toolbox.evaluate_test_score, (self.best,))[0]
@@ -469,34 +483,46 @@ class GPSymbolicRegressor():
             start = end  # Update the start index for the next sublist
         return result
 
-    def __local_search(self, n_iter: int = 1, n_mutations: int = 500,
-                       n_inds_to_refine: int = 10):
+    def __local_search(
+        self, n_iter: int = 1, n_mutations: int = 500, n_inds_to_refine: int = 10
+    ):
 
         for i in range(self.num_islands):
             # select N best individuals for refinement
             sel_individuals = tools.selBest(self.pop[i], k=n_inds_to_refine)
 
             # store indices of best individuals in the population
-            idx_ind = [self.pop[i].index(sel_individuals[j])
-                       for j in range(n_inds_to_refine)]
+            idx_ind = [
+                self.pop[i].index(sel_individuals[j]) for j in range(n_inds_to_refine)
+            ]
 
             # initialize best-so-far individuals and fitnesses with the
             # current individuals
-            best_so_far_fits = [sel_individuals[j].fitness.values[0]
-                                for j in range(n_inds_to_refine)]
+            best_so_far_fits = [
+                sel_individuals[j].fitness.values[0] for j in range(n_inds_to_refine)
+            ]
             best_so_far_inds = self.toolbox.clone(sel_individuals)
 
             for _ in range(n_iter):
                 mutants = self.toolbox.clone(best_so_far_inds)
                 # generate mutations for each of the best individuals
-                mut_ind = [[gp.mixedMutate(mutants[j], self.toolbox.expr_mut, self.pset,
-                                           [0.4, 0.3, 0.3])[0]
-                            for _ in range(n_mutations)]
-                           for j in range(n_inds_to_refine)]
+                mut_ind = [
+                    [
+                        gp.mixedMutate(
+                            mutants[j],
+                            self.toolbox.expr_mut,
+                            self.pset,
+                            [0.4, 0.3, 0.3],
+                        )[0]
+                        for _ in range(n_mutations)
+                    ]
+                    for j in range(n_inds_to_refine)
+                ]
                 for j in range(n_inds_to_refine):
                     # evaluate fitnesses of mutated individuals
                     fitness_mutated_inds = self.toolbox.map(
-                        self.toolbox.evaluate_train, mut_ind[j])
+                        self.toolbox.evaluate_train, mut_ind[j]
+                    )
 
                     # assign fitnesses to mutated individuals
                     for ind, fit in zip(mut_ind[j], fitness_mutated_inds):
@@ -517,25 +543,31 @@ class GPSymbolicRegressor():
     def __evolve_islands(self, cgen: int):
         num_evals = 0
 
-        invalid_inds = [None]*self.num_islands
-        offsprings = [None]*self.num_islands
-        elite_inds = [None]*self.num_islands
+        invalid_inds = [None] * self.num_islands
+        offsprings = [None] * self.num_islands
+        elite_inds = [None] * self.num_islands
 
         for i in range(self.num_islands):
             if self.immigration_enabled:
                 if cgen % self.immigration_freq == 0:
                     self.immigration(
-                        self.pop[i], int(self.immigration_frac*self.NINDIVIDUALS))
+                        self.pop[i], int(self.immigration_frac * self.NINDIVIDUALS)
+                    )
 
             # Select the parents for the offspring
             offsprings[i] = list(
-                map(self.toolbox.clone, self.toolbox.select(self.pop[i])))
+                map(self.toolbox.clone, self.toolbox.select(self.pop[i]))
+            )
 
             # Apply crossover and mutation to the offspring with elitism
             elite_inds[i] = tools.selBest(offsprings[i], self.n_elitist)
-            offsprings[i] = elite_inds[i] + \
-                algorithms.varOr(offsprings[i], self.toolbox, self.NINDIVIDUALS -
-                                 self.n_elitist, self.crossover_prob, self.MUTPB)
+            offsprings[i] = elite_inds[i] + algorithms.varOr(
+                offsprings[i],
+                self.toolbox,
+                self.NINDIVIDUALS - self.n_elitist,
+                self.crossover_prob,
+                self.MUTPB,
+            )
 
             # add individuals subject to cross-over and mutation to the list of invalids
             invalid_inds[i] = [ind for ind in offsprings[i] if not ind.fitness.valid]
@@ -545,8 +577,9 @@ class GPSymbolicRegressor():
             if self.preprocess_func is not None:
                 self.preprocess_func(invalid_inds[i])
 
-        fitnesses = self.toolbox.map(self.toolbox.evaluate_train,
-                                     self.__flatten_list(invalid_inds))
+        fitnesses = self.toolbox.map(
+            self.toolbox.evaluate_train, self.__flatten_list(invalid_inds)
+        )
         fitnesses = self.__unflatten_list(fitnesses, [len(i) for i in invalid_inds])
 
         for i in range(self.num_islands):
@@ -563,12 +596,16 @@ class GPSymbolicRegressor():
             else:
                 # parents and offspring compete for survival (truncation selection)
                 self.pop[i] = tools.selBest(
-                    self.pop[i] + offsprings[i], self.NINDIVIDUALS)
+                    self.pop[i] + offsprings[i], self.NINDIVIDUALS
+                )
 
         # migrations among islands
         if cgen % self.mig_frac == 0 and self.num_islands > 1:
-            migRing(self.pop, int(self.mig_frac*self.NINDIVIDUALS),
-                    selection=random.sample)
+            migRing(
+                self.pop,
+                int(self.mig_frac * self.NINDIVIDUALS),
+                selection=random.sample,
+            )
 
         # self.__local_search()
 
@@ -579,7 +616,7 @@ class GPSymbolicRegressor():
 
         # Generate initial population
         print("Generating initial population(s)...", flush=True)
-        self.pop = [None]*self.num_islands
+        self.pop = [None] * self.num_islands
         for i in range(self.num_islands):
             self.pop[i] = self.toolbox.population(n=self.NINDIVIDUALS)
 
@@ -592,7 +629,7 @@ class GPSymbolicRegressor():
         # Seeds the first island with individuals
         if self.seed is not None:
             print("Seeding population with individuals...", flush=True)
-            self.pop[0][:len(self.seed)] = self.seed
+            self.pop[0][: len(self.seed)] = self.seed
 
         print(" -= START OF EVOLUTION =- ", flush=True)
 
@@ -617,17 +654,18 @@ class GPSymbolicRegressor():
         print("DONE.", flush=True)
 
         for gen in range(self.NGEN):
-            cgen = gen + 1
+            self.cgen = gen + 1
 
-            num_evals = self.__evolve_islands(cgen)
+            num_evals = self.__evolve_islands(self.cgen)
 
             # select the best individuals in the current population
             # (including all islands)
-            best_inds = tools.selBest(self.__flatten_list(
-                self.pop), k=self.num_best_inds_str)
+            best_inds = tools.selBest(
+                self.__flatten_list(self.pop), k=self.num_best_inds_str
+            )
 
             # compute and print population statistics (including all islands)
-            self.__stats(self.__flatten_list(self.pop), cgen, num_evals)
+            self.__stats(self.__flatten_list(self.pop), self.cgen, num_evals)
 
             print("Best individuals of this generation:", flush=True)
             for i in range(self.num_best_inds_str):
@@ -637,16 +675,27 @@ class GPSymbolicRegressor():
             self.train_fit_history = self.logbook.chapters["fitness"].select("min")
             if self.validate:
                 self.val_fit_history = self.logbook.chapters["valid"].select(
-                    "valid_fit")
+                    "valid_fit"
+                )
                 self.val_fit_history = self.logbook.chapters["valid"].select(
-                    "valid_fit")
+                    "valid_fit"
+                )
                 self.min_valerr = min(self.val_fit_history)
 
-            if self.plot_history and (cgen % self.plot_freq == 0 or cgen == 1):
+            if self.plot_history and (
+                self.cgen % self.plot_freq == 0 or self.cgen == 1
+            ):
                 self.__plot_history()
 
-            if self.plot_best and (self.toolbox.plot_best_func is not None) \
-                    and (cgen % self.plot_freq == 0 or cgen == 1 or cgen == self.NGEN):
+            if (
+                self.plot_best
+                and (self.toolbox.plot_best_func is not None)
+                and (
+                    self.cgen % self.plot_freq == 0
+                    or self.cgen == 1
+                    or self.cgen == self.NGEN
+                )
+            ):
                 self.toolbox.plot_best_func(best_inds[0])
 
             self.best = best_inds[0]
@@ -694,15 +743,13 @@ class GPSymbolicRegressor():
         plt.show()
 
     def save_best_individual(self, output_path: str):
-        """Saves the string of the best individual of the population in a .txt file.
-        """
+        """Saves the string of the best individual of the population in a .txt file."""
         file = open(join(output_path, "best_ind.txt"), "w")
         file.write(str(self.best))
         file.close()
 
     def save_train_fit_history(self, output_path: str):
-        np.save(join(output_path, "train_fit_history.npy"),
-                self.train_fit_history)
+        np.save(join(output_path, "train_fit_history.npy"), self.train_fit_history)
         if self.validate:
             np.save(join(output_path, "val_fit_history.npy"), self.val_fit_history)
 
