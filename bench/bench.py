@@ -89,7 +89,7 @@ def eval_MSE_and_tune_constants(tree, toolbox, D):
                 return [total_err]
 
             def gradient(self, x):
-                xt = mg.tensor(x)
+                xt = mg.tensor(x, dtype="float64", copy=False)
                 f = self.fitness(xt)[0]
                 f.backward()
                 return xt.grad
@@ -99,13 +99,13 @@ def eval_MSE_and_tune_constants(tree, toolbox, D):
 
         # PYGMO SOLVER
         prb = pg.problem(fitting_problem())
-        algo = pg.algorithm(pg.nlopt(solver="lbfgs"))
-        algo.extract(pg.nlopt).maxeval = 10
+        # algo = pg.algorithm(pg.nlopt(solver="lbfgs"))
         # algo = pg.algorithm(pg.cmaes(gen=70))
-        # algo = pg.algorithm(pg.pso(gen=10))
+        algo = pg.algorithm(pg.pso(gen=10))
         # algo = pg.algorithm(pg.sea(gen=70))
-        # pop = pg.population(prb, size=70)
-        pop = pg.population(prb, size=1)
+        pop = pg.population(prb, size=70)
+        # algo.extract(pg.nlopt).maxeval = 10
+        # pop = pg.population(prb, size=1)
         pop.push_back(x0)
         pop = algo.evolve(pop)
         MSE = pop.champion_f[0]
@@ -191,19 +191,22 @@ def assign_attributes(individuals, attributes):
         ind.fitness.values = attr["fitness"]
 
 
-def bench(problem, seed=42):
-    if problem == "Nguyen-13":
-        with open("bench_alpine_Nguyen13.yaml") as config_file:
-            config_file_data = yaml.safe_load(config_file)
-    elif problem == "1089_USCrime":
-        with open("bench_alpine_1089_USCrime.yaml") as config_file:
-            config_file_data = yaml.safe_load(config_file)
-    elif problem == "C1":
-        with open("bench_alpine_C1.yaml") as config_file:
-            config_file_data = yaml.safe_load(config_file)
-    else:
-        with open("bench_alpine.yaml") as config_file:
-            config_file_data = yaml.safe_load(config_file)
+def bench(problem, cfgfile, seed=42):
+    # if problem == "Nguyen-13":
+    #     with open("bench_alpine_Nguyen13.yaml") as config_file:
+    #         config_file_data = yaml.safe_load(config_file)
+    # elif problem == "1089_USCrime":
+    #     with open("bench_alpine_1089_USCrime.yaml") as config_file:
+    #         config_file_data = yaml.safe_load(config_file)
+    # elif problem == "C1":
+    #     with open("bench_alpine_C1.yaml") as config_file:
+    #         config_file_data = yaml.safe_load(config_file)
+    # else:
+    #     with open("bench_alpine.yaml") as config_file:
+    #         config_file_data = yaml.safe_load(config_file)
+
+    with open(cfgfile) as config_file:
+        config_file_data = yaml.safe_load(config_file)
 
     scaleXy = config_file_data["gp"]["scaleXy"]
 
@@ -213,7 +216,7 @@ def bench(problem, seed=42):
         y_train_scaled,
         X_test_scaled,
         y_test,
-        scaler_X,
+        _,
         scaler_y,
         num_variables,
         _,
@@ -229,19 +232,18 @@ def bench(problem, seed=42):
     else:
         pset = gp.PrimitiveSetTyped("Main", [float] * num_variables, float)
 
-    batch_size = 200
+    batch_size = config_file_data["gp"]["batch_size"]
+    if config_file_data["gp"]["use_constants"]:
+        pset.addTerminal(object, float, "a")
+
     callback_func = assign_attributes
     fitness_scale = 1.0
 
-    if problem == "Nguyen-13" or problem == "1089_USCrime":
-        batch_size = 10
-        pset.addTerminal(object, float, "a")
-
-    if problem == "C1":
-        batch_size = 100
-        fitness_scale = 1e6
-        config_file_data["gp"]["penalty"]["reg_param"] = 0.0
-        pset.addTerminal(object, float, "a")
+    # if problem == "C1":
+    #     batch_size = 100
+    #     fitness_scale = 1e6
+    #     config_file_data["gp"]["penalty"]["reg_param"] = 0.0
+    #     pset.addTerminal(object, float, "a")
 
     penalty = config_file_data["gp"]["penalty"]
     common_params = {"penalty": penalty, "fitness_scale": fitness_scale}
@@ -253,10 +255,10 @@ def bench(problem, seed=42):
         error_metric=compute_MSEs.remote,
         common_data=common_params,
         callback_func=callback_func,
-        print_log=True,
+        print_log=False,
         num_best_inds_str=1,
         config_file_data=config_file_data,
-        save_best_individual=True,
+        save_best_individual=False,
         output_path="./",
         seed=None,
         batch_size=batch_size,
@@ -320,10 +322,14 @@ def bench(problem, seed=42):
     #     return 1.0
     # else:
     #     return 0.0
-    return r2_test
+    return r2_train, r2_test
 
 
 if __name__ == "__main__":
+    import argparse
+    import pathlib
+    import ray
+
     # problems = [
     #     "Nguyen-1",
     #     "Nguyen-2",
@@ -340,16 +346,55 @@ if __name__ == "__main__":
     #     "Nguyen-13",
     # ]
 
-    problem = "1089_USCrime"
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument("problem", help="Name of the PMLB or Nguyen dataset.")
+    parser.add_argument(
+        "-c",
+        type=pathlib.Path,
+        metavar="cfgfile",
+        help="Path of the YAML config file for the problem.",
+    )
+
+    args = parser.parse_args()
+
+    problem = args.problem
+    cfgfile = args.c
+
+    # problem = "1089_USCrime"
 
     seeds = [29802, 22118, 860, 15795, 21575, 5390, 11964, 6265, 23654, 11284]
-    # seeds = [29802]
+
     r2_tests = []
-    for seed in seeds:
-        r2_tests.append(bench(problem=problem, seed=seed))
+
+    # possibly add rmse_train, rmse_test, rmse_val
+    header = ["problem", "trial", "r2_train", "r2_test", "seed"]
+
+    with open(f"./results/{problem}.csv", "w") as f:
+        for h in header:
+            f.write(h)
+            f.write("\n" if h == header[-1] else ";")
+
+    for i, seed in enumerate(seeds):
+        r2_train, r2_test = bench(problem=problem, cfgfile=cfgfile, seed=seed)
+        r2_tests.append(r2_test)
+
+        stats = {
+            "problem": problem,
+            "trial": i + 1,
+            "r2_train": r2_train,
+            "r2_test": r2_test,
+            "seed": seed,
+        }
+
+        with open(f"./results/{problem}.csv", "a") as f:
+            for h in header:
+                f.write(f"{stats[h]}")
+                f.write("\n" if h == header[-1] else ";")
 
     print("Median Test R^2 = ", np.median(r2_tests))
 
+    ray.shutdown()
     # Nguyen
     # ave_success_rate = 0.0
     # with open("bench_stats.txt", "w") as file:
