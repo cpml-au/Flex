@@ -191,7 +191,7 @@ def assign_attributes(individuals, attributes):
         ind.fitness.values = attr["fitness"]
 
 
-def bench(problem="Nguyen-8"):
+def bench(problem, seed=42):
     if problem == "Nguyen-13":
         with open("bench_alpine_Nguyen13.yaml") as config_file:
             config_file_data = yaml.safe_load(config_file)
@@ -217,7 +217,7 @@ def bench(problem="Nguyen-8"):
         scaler_y,
         num_variables,
         _,
-    ) = generate_dataset(problem, scaleXy=scaleXy)
+    ) = generate_dataset(problem, scaleXy=scaleXy, random_state=seed)
 
     if num_variables == 1:
         pset = gp.PrimitiveSetTyped("Main", [float], float)
@@ -235,7 +235,6 @@ def bench(problem="Nguyen-8"):
 
     if problem == "Nguyen-13" or problem == "1089_USCrime":
         batch_size = 10
-        config_file_data["gp"]["penalty"]["reg_param"] = 1e-4
         pset.addTerminal(object, float, "a")
 
     if problem == "C1":
@@ -300,47 +299,67 @@ def bench(problem="Nguyen-8"):
         u_best = scaler_y.inverse_transform(u_best.reshape(-1, 1)).flatten()
 
     MSE = np.mean((u_best - y_test) ** 2)
-    r2 = r2_score(y_test, u_best)
+    r2_test = r2_score(y_test, u_best)
     print("MSE on the test set = ", MSE)
-    print("R^2 on the test set = ", r2)
-    if MSE <= 1e-10 or (problem == "Nguyen-13" and MSE <= 1e-5):
-        return 1.0
-    else:
-        return 0.0
+    print("R^2 on the test set = ", r2_test)
+
+    pred_train = gpsr.predict(train_data)
+
+    if scaleXy:
+        pred_train = scaler_y.inverse_transform(pred_train.reshape(-1, 1)).flatten()
+        y_train_scaled = scaler_y.inverse_transform(
+            y_train_scaled.reshape(-1, 1)
+        ).flatten()
+
+    MSE = np.mean((pred_train - y_train_scaled) ** 2)
+    r2_train = r2_score(y_train_scaled, pred_train)
+    print("MSE on the training set = ", MSE)
+    print("R^2 on the training set = ", r2_train)
+    # Nguyen
+    # if MSE <= 1e-10 or (problem == "Nguyen-13" and MSE <= 1e-5):
+    #     return 1.0
+    # else:
+    #     return 0.0
+    return r2_test
 
 
 if __name__ == "__main__":
-    problems = [
-        "Nguyen-1",
-        "Nguyen-2",
-        "Nguyen-3",
-        "Nguyen-4",
-        "Nguyen-5",
-        "Nguyen-6",
-        "Nguyen-7",
-        "Nguyen-8",
-        "Nguyen-9",
-        "Nguyen-10",
-        "Nguyen-11",
-        "Nguyen-12",
-        "Nguyen-13",
-    ]
+    # problems = [
+    #     "Nguyen-1",
+    #     "Nguyen-2",
+    #     "Nguyen-3",
+    #     "Nguyen-4",
+    #     "Nguyen-5",
+    #     "Nguyen-6",
+    #     "Nguyen-7",
+    #     "Nguyen-8",
+    #     "Nguyen-9",
+    #     "Nguyen-10",
+    #     "Nguyen-11",
+    #     "Nguyen-12",
+    #     "Nguyen-13",
+    # ]
 
-    # problems = ["Nguyen-12"]
-    # problems = ["1089_USCrime"]
+    problem = "1089_USCrime"
 
-    # problems = ["C1"]
+    seeds = [29802, 22118, 860, 15795, 21575, 5390, 11964, 6265, 23654, 11284]
+    # seeds = [29802]
+    r2_tests = []
+    for seed in seeds:
+        r2_tests.append(bench(problem=problem, seed=seed))
 
-    ave_success_rate = 0.0
+    print("Median Test R^2 = ", np.median(r2_tests))
 
-    with open("bench_stats.txt", "w") as file:
-        for problem in problems:
-            success = 0.0
-            for i in range(num_runs):
-                print("Problem {prb}, RUN #{num}".format(prb=problem, num=i))
-                success += bench(problem=problem)
-            success_rate = success / num_runs * 100
-            ave_success_rate += success_rate / len(problems)
-            str_to_print = problem + " " + str(success_rate)
-            print(str_to_print, file=file, flush=True)
-        print("Average success rate = ", ave_success_rate)
+    # Nguyen
+    # ave_success_rate = 0.0
+    # with open("bench_stats.txt", "w") as file:
+    #     for problem in problems:
+    #         success = 0.0
+    #         for i in range(num_runs):
+    #             print("Problem {prb}, RUN #{num}".format(prb=problem, num=i))
+    #             success += bench(problem=problem)
+    #         success_rate = success / num_runs * 100
+    #         ave_success_rate += success_rate / len(problems)
+    #         str_to_print = problem + " " + str(success_rate)
+    #         print(str_to_print, file=file, flush=True)
+    #     print("Average success rate = ", ave_success_rate)
