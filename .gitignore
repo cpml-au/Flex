@@ -15,8 +15,6 @@ __pycache__/*
 .DS_Store
 *.npy
 *.txt
-*.yaml
-!apps/*_template.yaml
 bench/datasets/*
 
 # Project files
