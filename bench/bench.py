@@ -17,7 +17,11 @@ import re
 from sklearn.metrics import r2_score
 from datasets import generate_dataset
 
+from icecream import ic
+
 import mygrad as mg
+from mygrad._utils.lock_management import mem_guard_off
+
 
 num_cpus = 1
 num_runs = 1  # 20
@@ -78,20 +82,19 @@ def eval_MSE_and_tune_constants(tree, toolbox, D):
 
             return total_err
 
-        objective = eval_MSE
-
         x0 = np.ones(num_consts)
 
         class fitting_problem:
             def fitness(self, x):
-                total_err = objective(x)
+                total_err = eval_MSE(x)
                 # return [total_err + 0.*(np.linalg.norm(x, 2))**2]
                 return [total_err]
 
             def gradient(self, x):
-                xt = mg.tensor(x, dtype="float64", copy=False)
-                f = self.fitness(xt)[0]
-                f.backward()
+                with mem_guard_off:
+                    xt = mg.tensor(x, copy=False)
+                    f = self.fitness(xt)[0]
+                    f.backward()
                 return xt.grad
 
             def get_bounds(self):
@@ -99,13 +102,11 @@ def eval_MSE_and_tune_constants(tree, toolbox, D):
 
         # PYGMO SOLVER
         prb = pg.problem(fitting_problem())
-        # algo = pg.algorithm(pg.nlopt(solver="lbfgs"))
-        # algo = pg.algorithm(pg.cmaes(gen=70))
-        algo = pg.algorithm(pg.pso(gen=10))
-        # algo = pg.algorithm(pg.sea(gen=70))
-        pop = pg.population(prb, size=70)
-        # algo.extract(pg.nlopt).maxeval = 10
-        # pop = pg.population(prb, size=1)
+        algo = pg.algorithm(pg.nlopt(solver="lbfgs"))
+        # algo = pg.algorithm(pg.pso(gen=10))
+        # pop = pg.population(prb, size=70)
+        algo.extract(pg.nlopt).maxeval = 10
+        pop = pg.population(prb, size=1)
         pop.push_back(x0)
         pop = algo.evolve(pop)
         MSE = pop.champion_f[0]
@@ -192,18 +193,6 @@ def assign_attributes(individuals, attributes):
 
 
 def bench(problem, cfgfile, seed=42):
-    # if problem == "Nguyen-13":
-    #     with open("bench_alpine_Nguyen13.yaml") as config_file:
-    #         config_file_data = yaml.safe_load(config_file)
-    # elif problem == "1089_USCrime":
-    #     with open("bench_alpine_1089_USCrime.yaml") as config_file:
-    #         config_file_data = yaml.safe_load(config_file)
-    # elif problem == "C1":
-    #     with open("bench_alpine_C1.yaml") as config_file:
-    #         config_file_data = yaml.safe_load(config_file)
-    # else:
-    #     with open("bench_alpine.yaml") as config_file:
-    #         config_file_data = yaml.safe_load(config_file)
 
     with open(cfgfile) as config_file:
         config_file_data = yaml.safe_load(config_file)
@@ -322,6 +311,7 @@ def bench(problem, cfgfile, seed=42):
     #     return 1.0
     # else:
     #     return 0.0
+
     return r2_train, r2_test
 
 
