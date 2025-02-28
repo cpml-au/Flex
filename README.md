@@ -26,6 +26,39 @@ elastica). Scripts to reproduce these benchmarks can be found [here](https://git
 - support for custom operators (with/without strong-typing);
 - benchmark suite (Nguyen and interface to SRBench) 
 
+## Installation
+
+Dependencies should be installed within a `conda` environment. We recommend using
+[`mamba`](https://github.com/mamba-org/mamba) since it is much faster than `conda` at
+solving the environment and downloading the dependencies. To create a suitable
+environment based on the provided `.yaml` file, use the command
+
+```bash
+$ mamba env create -f environment.yaml
+```
+
+Otherwise, you can update an existing environment using the same `.yaml` file.
+
+After activating the environment, clone the git repository and launch the following command
+
+```bash
+$ pip install -e .
+```
+
+to install a development version of the library.
+
+Running the tests:
+
+```bash
+$ tox
+```
+
+Generating the docs:
+
+```bash
+$ tox -e docs
+```
+
 ## Benchmarks
 
 To run the benchmarks, cd into the `bench` folder and execute:
@@ -34,7 +67,8 @@ $ ./bench.sh
 ```
 Then process the results using the `process_results` notebook.
 
-Results on [PMLB](https://epistasislab.github.io/pmlb/) datasets (average $R^2$ over 10 test sets):
+Results on [PMLB](https://epistasislab.github.io/pmlb/) datasets (average $R^2$ over 10
+test sets, no Friedman):
 
 | dataset                       |       mean |     median |        std |
 |:------------------------------|-----------:|-----------:|-----------:|
@@ -78,39 +112,6 @@ Results on [PMLB](https://epistasislab.github.io/pmlb/) datasets (average $R^2$ 
 | 687_sleuth_ex1605             | -0.0707247 | -0.0740387 | 0.372597   |
 
 **Median test $R^2$: 0.7683**.
-
-## Installation
-
-Dependencies should be installed within a `conda` environment. We recommend using
-[`mamba`](https://github.com/mamba-org/mamba) since it is much faster than `conda` at
-solving the environment and downloading the dependencies. To create a suitable
-environment based on the provided `.yaml` file, use the command
-
-```bash
-$ mamba env create -f environment.yaml
-```
-
-Otherwise, you can update an existing environment using the same `.yaml` file.
-
-After activating the environment, clone the git repository and launch the following command
-
-```bash
-$ pip install -e .
-```
-
-to install a development version of the library.
-
-Running the tests:
-
-```bash
-$ tox
-```
-
-Generating the docs:
-
-```bash
-$ tox -e docs
-```
 
 ## Usage
 
