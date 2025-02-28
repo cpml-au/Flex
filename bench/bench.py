@@ -17,8 +17,6 @@ import re
 from sklearn.metrics import r2_score
 from datasets import generate_dataset
 
-from icecream import ic
-
 import mygrad as mg
 from mygrad._utils.lock_management import mem_guard_off
 
@@ -192,7 +190,7 @@ def assign_attributes(individuals, attributes):
         ind.fitness.values = attr["fitness"]
 
 
-def bench(problem, cfgfile, seed=42):
+def eval(problem, cfgfile, seed=42):
 
     with open(cfgfile) as config_file:
         config_file_data = yaml.safe_load(config_file)
@@ -366,7 +364,8 @@ if __name__ == "__main__":
             f.write("\n" if h == header[-1] else ";")
 
     for i, seed in enumerate(seeds):
-        r2_train, r2_test = bench(problem=problem, cfgfile=cfgfile, seed=seed)
+        print("PROBLEM: ", problem)
+        r2_train, r2_test = eval(problem=problem, cfgfile=cfgfile, seed=seed)
         r2_tests.append(r2_test)
 
         stats = {

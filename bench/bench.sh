@@ -1,5 +1,5 @@
-# python bench.py -c PMLB_base.yaml 1089_USCrime
-# python bench.py -c PMLB_base.yaml 1027_ESL
+python bench.py -c PMLB_base.yaml 1089_USCrime
+python bench.py -c PMLB_base.yaml 1027_ESL
 python bench.py -c PMLB_base.yaml 1028_SWD
 python bench.py -c PMLB_base.yaml 1029_LEV
 python bench.py -c PMLB_base.yaml 1030_ERA

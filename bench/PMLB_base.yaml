@@ -1,6 +1,6 @@
 gp:
   NINDIVIDUALS: 1000 # 1000
-  NGEN: 20 # 200
+  NGEN: 100 # 200
   multi_island:
     num_islands: 5 # 15
     migration: { "freq": 10, "frac": 0.05 }
@@ -11,7 +11,7 @@ gp:
   max_: 4
   overlapping_generation: True
   validate: False
-  penalty: { "method": "length", "reg_param": 3.e-3 }
+  penalty: { "method": "length", "reg_param": 1.e-3 }
   select:
     # fun: self.tournament_with_elitism
     # kargs: "{'tournsize': 2, 'stochastic_tourn': { 'enabled': True, 'prob': [0.7, 0.3] }}"

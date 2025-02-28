@@ -667,9 +667,10 @@ class GPSymbolicRegressor:
             # compute and print population statistics (including all islands)
             self.__stats(self.__flatten_list(self.pop), self.cgen, num_evals)
 
-            print("Best individuals of this generation:", flush=True)
-            for i in range(self.num_best_inds_str):
-                print(str(best_inds[i]))
+            if self.print_log:
+                print("Best individuals of this generation:", flush=True)
+                for i in range(self.num_best_inds_str):
+                    print(str(best_inds[i]))
 
             # Update history of best fitness and best validation error
             self.train_fit_history = self.logbook.chapters["fitness"].select("min")
