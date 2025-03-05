@@ -94,6 +94,7 @@ def test_basic_sr(set_test_dir):
     seed = [
         "AddF(AddF(AddF(MulF(MulF(x, MulF(x, x)),x), MulF(x,MulF(x, x))), MulF(x, x)), x)"
     ]  # noqa: E501
+
     gpsr = GPSymbolicRegressor(
         pset=pset,
         fitness=fitness.remote,

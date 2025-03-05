@@ -66,23 +66,38 @@ class GPSymbolicRegressor:
         self,
         pset: gp.PrimitiveSet | gp.PrimitiveSetTyped,
         fitness: Callable,
-        error_metric: Callable | None = None,
-        predict_func: Callable | None = None,
-        common_data: Dict | None = None,
-        toolbox: base.Toolbox = None,
-        individualCreator: gp.PrimitiveTree = None,
+        select_fun: str = "tools.selection.tournament_with_elitism",
+        select_args: str = "{'num_elitist': self.n_elitist, 'tournsize': 3, 'stochastic_tourn': { 'enabled': False, 'prob': [0.8, 0.2] }}",
+        mut_fun: str = "gp.mutUniform",
+        mut_args: str = "{'expr': self.toolbox.expr_mut, 'pset': self.pset}",
+        expr_mut_fun: str = "gp.genHalfAndHalf",
+        expr_mut_args: str = "{'min_': 1, 'max_': 3}",
+        crossover_fun: str = "gp.cxOnePoint",
+        crossover_args: str = "{}",
+        min_height: int = 1,
+        max_height: int = 3,
         NINDIVIDUALS: int = 10,
         NGEN: int = 1,
         num_islands: int = 1,
+        mig_freq: int = 10,
+        mig_frac: float = 0.05,
         crossover_prob: float = 0.5,
         MUTPB: float = 0.2,
         frac_elitist: float = 0.0,
         overlapping_generation: bool = False,
+        immigration_enabled: bool = False,
+        immigration_freq: int = 0,
+        immigration_frac: float = 0.0,
+        error_metric: Callable | None = None,
+        predict_func: Callable | None = None,
+        common_data: Dict | None = None,
+        # toolbox: base.Toolbox = None,
+        # individualCreator: gp.PrimitiveTree = None,
         validate: bool = False,
         preprocess_func: Callable | None = None,
         callback_func: Callable | None = None,
         seed: List[str] | None = None,
-        config_file_data: Dict | None = None,
+        # config_file_data: Dict | None = None,
         plot_history: bool = False,
         print_log: bool = False,
         num_best_inds_str: int = 1,
@@ -124,24 +139,38 @@ class GPSymbolicRegressor:
             # FIXME: does everything work when the functions do not have common args?
             self.store_fit_error_common_args(common_data)
 
-        if config_file_data is not None:
-            self.__load_config_data(config_file_data)
-        else:
-            self.NINDIVIDUALS = NINDIVIDUALS
-            self.NGEN = NGEN
-            self.num_islands = num_islands
-            self.crossover_prob = crossover_prob
-            self.MUTPB = MUTPB
+        self.NINDIVIDUALS = NINDIVIDUALS
+        self.NGEN = NGEN
+        self.num_islands = num_islands
+        self.crossover_prob = crossover_prob
+        self.MUTPB = MUTPB
+        self.select_fun = select_fun
+        self.select_args = select_args
+        self.mut_fun = mut_fun
+        self.mut_args = mut_args
+        self.expr_mut_fun = expr_mut_fun
+        self.expr_mut_args = expr_mut_args
+        self.crossover_fun = crossover_fun
+        self.crossover_args = crossover_args
+        self.min_height = min_height
+        self.max_height = max_height
+        self.mig_freq = mig_freq
+        self.mig_frac = mig_frac
+        self.immigration_enabled = immigration_enabled
+        self.immigration_frac = immigration_frac
+        self.immigration_freq = immigration_freq
 
-            self.overlapping_generation = overlapping_generation
-            self.validate = validate
+        self.overlapping_generation = overlapping_generation
+        self.validate = validate
 
-            # Elitism settings
-            self.n_elitist = int(frac_elitist * self.NINDIVIDUALS)
+        # Elitism settings
+        self.n_elitist = int(frac_elitist * self.NINDIVIDUALS)
 
-            self.createIndividual = individualCreator
+        # config individual creator and toolbox
+        self.__creator_toolbox_config()
+        # self.createIndividual = individualCreator
 
-            self.toolbox = toolbox
+        # self.toolbox = toolbox
 
         self.seed = seed
 
@@ -176,31 +205,24 @@ class GPSymbolicRegressor:
         self.plot_initialized = False
         self.fig_id = 0
 
-    def __creator_toolbox_config(self, config_file_data: Dict):
+    def __creator_toolbox_config(self):
         """Initialize toolbox and individual creator based on config file."""
         self.toolbox = base.Toolbox()
 
         # SELECTION
-        select_fun = eval(config_file_data["gp"]["select"]["fun"])
-        select_args = eval(config_file_data["gp"]["select"]["kargs"])
-        self.toolbox.register("select", select_fun, **select_args)
+        self.toolbox.register("select", eval(self.select_fun), **eval(self.select_args))
 
         # MUTATION
-        expr_mut_fun = config_file_data["gp"]["mutate"]["expr_mut"]
-        expr_mut_kargs = eval(config_file_data["gp"]["mutate"]["expr_mut_kargs"])
+        self.toolbox.register(
+            "expr_mut", eval(self.expr_mut_fun), **eval(self.expr_mut_args)
+        )
 
-        self.toolbox.register("expr_mut", eval(expr_mut_fun), **expr_mut_kargs)
-
-        mutate_fun = config_file_data["gp"]["mutate"]["fun"]
-        mutate_kargs = eval(config_file_data["gp"]["mutate"]["kargs"])
-
-        self.toolbox.register("mutate", eval(mutate_fun), **mutate_kargs)
+        self.toolbox.register("mutate", eval(self.mut_fun), **eval(self.mut_args))
 
         # CROSSOVER
-        crossover_fun = config_file_data["gp"]["crossover"]["fun"]
-        crossover_kargs = eval(config_file_data["gp"]["crossover"]["kargs"])
-
-        self.toolbox.register("mate", eval(crossover_fun), **crossover_kargs)
+        self.toolbox.register(
+            "mate", eval(self.crossover_fun), **eval(self.crossover_args)
+        )
         self.toolbox.decorate(
             "mate", gp.staticLimit(key=operator.attrgetter("height"), max_value=17)
         )
@@ -209,17 +231,19 @@ class GPSymbolicRegressor:
         )
 
         # INDIVIDUAL GENERATOR/CREATOR
-        min_ = config_file_data["gp"]["min_"]
-        max_ = config_file_data["gp"]["max_"]
         self.toolbox.register(
-            "expr", gp.genHalfAndHalf, pset=self.pset, min_=min_, max_=max_
+            "expr",
+            gp.genHalfAndHalf,
+            pset=self.pset,
+            min_=self.min_height,
+            max_=self.max_height,
         )
         self.toolbox.register(
             "expr_pop",
             gp.genHalfAndHalf,
             pset=self.pset,
-            min_=min_,
-            max_=max_,
+            min_=self.min_height,
+            max_=self.max_height,
             is_pop=True,
         )
         creator.create("FitnessMin", base.Fitness, weights=(-1.0,))
