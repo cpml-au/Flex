@@ -1,4 +1,3 @@
-import yaml
 import os
 from deap import gp
 from alpine.gp.gpsymbreg import GPSymbolicRegressor
@@ -102,8 +101,8 @@ def fitness(individuals_str, toolbox, true_data, penalty):
 def main():
     yamlfile = "simple_sr.yaml"
     filename = os.path.join(os.path.dirname(__file__), yamlfile)
-    with open(filename) as config_file:
-        config_file_data = yaml.safe_load(config_file)
+
+    regressor_params, config_file_data = util.load_config_data(filename)
 
     pset = gp.PrimitiveSetTyped(
         "MAIN",
@@ -114,6 +113,10 @@ def main():
     )
     pset.renameArguments(ARG0="x")
 
+    pset = util.add_primitives_to_pset_from_dict(
+        pset, config_file_data["gp"]["primitives"]
+    )
+
     penalty = config_file_data["gp"]["penalty"]
     common_data = {"penalty": penalty}
 
@@ -123,9 +126,9 @@ def main():
         error_metric=score.remote,
         predict_func=predict.remote,
         common_data=common_data,
-        config_file_data=config_file_data,
         print_log=True,
         batch_size=100,
+        **regressor_params
     )
 
     train_data = Dataset("true_data", x, y)

@@ -1,3 +1,4 @@
+import yaml
 from .primitives import add_primitives_to_pset
 from importlib import import_module
 
@@ -19,6 +20,41 @@ def add_primitives_to_pset_from_dict(pset, primitives_dict):
     )
 
     return pset
+
+
+def load_config_data(filename):
+    """Load problem settings from YAML file."""
+    with open(filename) as config_file:
+        config_file_data = yaml.safe_load(config_file)
+
+    regressor_params = dict()
+    regressor_params["NINDIVIDUALS"] = config_file_data["gp"]["NINDIVIDUALS"]
+    regressor_params["NGEN"] = config_file_data["gp"]["NGEN"]
+    regressor_params["num_islands"] = config_file_data["gp"]["multi_island"][
+        "num_islands"
+    ]
+    regressor_params["mig_freq"] = config_file_data["gp"]["multi_island"]["migration"][
+        "freq"
+    ]
+    regressor_params["mig_frac"] = config_file_data["gp"]["multi_island"]["migration"][
+        "frac"
+    ]
+    regressor_params["crossover_prob"] = config_file_data["gp"]["crossover_prob"]
+    regressor_params["MUTPB"] = config_file_data["gp"]["MUTPB"]
+    regressor_params["frac_elitist"] = config_file_data["gp"]["frac_elitist"]
+    regressor_params["overlapping_generation"] = config_file_data["gp"][
+        "overlapping_generation"
+    ]
+
+    regressor_params["validate"] = config_file_data["gp"]["validate"]
+
+    regressor_params["immigration_enabled"] = config_file_data["gp"]["immigration"][
+        "enabled"
+    ]
+    regressor_params["immigration_freq"] = config_file_data["gp"]["immigration"]["freq"]
+    regressor_params["immigration_frac"] = config_file_data["gp"]["immigration"]["frac"]
+
+    return regressor_params, config_file_data
 
 
 def detect_nested_trigonometric_functions(equation):

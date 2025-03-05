@@ -33,8 +33,6 @@ class GPSymbolicRegressor:
         pset: set of primitives and terminals (loosely or strongly typed).
         predict_func: function that returns a prediction given an individual and
             a test `Dataset` as inputs.
-        toolbox: set to None if `config_file_data` is provided.
-        individualCreator: set to None if `config_file_data` is provided.
         NINDIVIDUALS: number of individuals in the parent population.
         NGEN: number of generations.
         num_islands: number of islands (for a multi-island model).
@@ -91,13 +89,10 @@ class GPSymbolicRegressor:
         error_metric: Callable | None = None,
         predict_func: Callable | None = None,
         common_data: Dict | None = None,
-        # toolbox: base.Toolbox = None,
-        # individualCreator: gp.PrimitiveTree = None,
         validate: bool = False,
         preprocess_func: Callable | None = None,
         callback_func: Callable | None = None,
         seed: List[str] | None = None,
-        # config_file_data: Dict | None = None,
         plot_history: bool = False,
         print_log: bool = False,
         num_best_inds_str: int = 1,
@@ -259,41 +254,6 @@ class GPSymbolicRegressor:
         self.toolbox.register("compile", gp.compile, pset=self.pset)
 
         self.createIndividual = createIndividual
-
-    def __load_config_data(self, config_file_data: Dict):
-        """Load problem settings from YAML file."""
-        self.NINDIVIDUALS = config_file_data["gp"]["NINDIVIDUALS"]
-        self.NGEN = config_file_data["gp"]["NGEN"]
-        self.num_islands = config_file_data["gp"]["multi_island"]["num_islands"]
-        self.mig_freq = config_file_data["gp"]["multi_island"]["migration"]["freq"]
-        self.mig_frac = config_file_data["gp"]["multi_island"]["migration"]["frac"]
-        self.crossover_prob = config_file_data["gp"]["crossover_prob"]
-        self.MUTPB = config_file_data["gp"]["MUTPB"]
-        self.n_elitist = int(config_file_data["gp"]["frac_elitist"] * self.NINDIVIDUALS)
-        self.overlapping_generation = config_file_data["gp"]["overlapping_generation"]
-
-        # generate primitives collection
-        primitives_collection = dict()
-        imports = config_file_data["gp"]["primitives"]["imports"].items()
-        for module_name, function_names in imports:
-            module = import_module(module_name)
-            for function_name in function_names:
-                primitive = getattr(module, function_name)
-                primitives_collection = primitives_collection | primitive
-
-        add_primitives_to_pset(
-            self.pset,
-            config_file_data["gp"]["primitives"]["used"],
-            primitives_collection,
-        )
-
-        self.__creator_toolbox_config(config_file_data=config_file_data)
-
-        self.validate = config_file_data["gp"]["validate"]
-
-        self.immigration_enabled = config_file_data["gp"]["immigration"]["enabled"]
-        self.immigration_freq = config_file_data["gp"]["immigration"]["freq"]
-        self.immigration_frac = config_file_data["gp"]["immigration"]["frac"]
 
     def store_fit_error_common_args(self, data: Dict):
         """Store names and values of the arguments that are in common between
