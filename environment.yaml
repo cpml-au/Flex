@@ -4,11 +4,11 @@ channels:
   - defaults
 dependencies:
   - gmsh
-  - jax
+  - jax==0.5.0
   - jaxopt
   - numpy
   - pygmo
-  - python
+  - python==3.12
   - python-gmsh
   - trame
   - ipywidgets
@@ -26,3 +26,4 @@ dependencies:
       - pygmsh
       - tox
       - mygrad
+      - tox-conda
