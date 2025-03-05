@@ -1,9 +1,9 @@
-import yaml
 import os
 from dctkit import config
 from deap import gp
 from alpine.gp.gpsymbreg import GPSymbolicRegressor
 from alpine.data import Dataset
+from alpine.gp import util
 import jax.numpy as jnp
 import ray
 
@@ -77,8 +77,8 @@ def fitness(individuals_str, toolbox, true_data):
 def test_basic_sr(set_test_dir):
     yamlfile = "test_basic_sr.yaml"
     filename = os.path.join(os.path.dirname(__file__), yamlfile)
-    with open(filename) as config_file:
-        config_file_data = yaml.safe_load(config_file)
+
+    regressor_params, config_file_data = util.load_config_data(filename)
 
     pset = gp.PrimitiveSetTyped(
         "MAIN",
@@ -90,10 +90,14 @@ def test_basic_sr(set_test_dir):
     pset.addPrimitive(jnp.add, [float, float], float, "AddF")
     pset.renameArguments(ARG0="x")
 
+    pset = util.add_primitives_to_pset_from_dict(
+        pset, config_file_data["gp"]["primitives"]
+    )
+
     common_data = {}
     seed = [
-        "AddF(AddF(AddF(MulF(MulF(x, MulF(x, x)),x), MulF(x,MulF(x, x))), MulF(x, x)), x)"
-    ]  # noqa: E501
+        "AddF(AddF(AddF(MulF(MulF(x, MulF(x, x)),x), MulF(x,MulF(x, x))), MulF(x, x)), x)"  # noqa: E501
+    ]
 
     gpsr = GPSymbolicRegressor(
         pset=pset,
@@ -101,9 +105,9 @@ def test_basic_sr(set_test_dir):
         error_metric=score.remote,
         predict_func=predict.remote,
         common_data=common_data,
-        config_file_data=config_file_data,
         seed=seed,
         batch_size=10,
+        **regressor_params
     )
 
     train_data = Dataset("true_data", x, y)

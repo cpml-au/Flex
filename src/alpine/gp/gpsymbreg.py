@@ -6,13 +6,11 @@ import operator
 from typing import List, Dict, Callable
 from os.path import join
 import networkx as nx
-from .primitives import add_primitives_to_pset
 from alpine.data import Dataset
 import os
 import ray
 import random
 from itertools import chain
-from importlib import import_module
 
 # reducing the number of threads launched by fitness evaluations
 os.environ["MKL_NUM_THREADS"] = "1"
@@ -65,7 +63,7 @@ class GPSymbolicRegressor:
         pset: gp.PrimitiveSet | gp.PrimitiveSetTyped,
         fitness: Callable,
         select_fun: str = "tools.selection.tournament_with_elitism",
-        select_args: str = "{'num_elitist': self.n_elitist, 'tournsize': 3, 'stochastic_tourn': { 'enabled': False, 'prob': [0.8, 0.2] }}",
+        select_args: str = "{'num_elitist': self.n_elitist, 'tournsize': 3, 'stochastic_tourn': { 'enabled': False, 'prob': [0.8, 0.2] }}",  # noqa: E501
         mut_fun: str = "gp.mutUniform",
         mut_args: str = "{'expr': self.toolbox.expr_mut, 'pset': self.pset}",
         expr_mut_fun: str = "gp.genHalfAndHalf",
