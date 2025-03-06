@@ -3,7 +3,7 @@ from dctkit.mesh.simplex import SimplicialComplex
 from dctkit.mesh.util import generate_line_mesh, build_complex_from_mesh
 from dctkit.math.opt import optctrl as oc
 from deap import gp
-from alpine.gp import gpsymbreg as gps
+from alpine.gp import regressor as gps
 from alpine.data import Dataset
 from dctkit import config
 import dctkit
@@ -34,10 +34,10 @@ def get_features_batch(individ_feature_extractors, individuals_str_batch):
 
 
 def eval_MSE_sol(
-    residual: Callable, D: Dataset, S: SimplicialComplex, u_0: C.CochainP0
+    residual: Callable, X, y, S: SimplicialComplex, u_0: C.CochainP0
 ) -> float:
 
-    num_nodes = D.X.shape[1]
+    num_nodes = X.shape[1]
 
     # need to call config again before using JAX in energy evaluations to make sure that
     # the current worker has initialized JAX
@@ -59,7 +59,7 @@ def eval_MSE_sol(
 
     u = []
 
-    for i, curr_y in enumerate(D.y):
+    for i, curr_y in enumerate(y):
         # set additional arguments of the objective function
         # (apart from the vector of unknowns)
         args = {"y": curr_y}
@@ -76,7 +76,7 @@ def eval_MSE_sol(
             or prb.last_opt_result == 4
         ):
 
-            current_err = np.linalg.norm(x - D.X[i, :]) ** 2
+            current_err = np.linalg.norm(x - X[i, :]) ** 2
         else:
             current_err = math.nan
 
@@ -88,7 +88,7 @@ def eval_MSE_sol(
 
         u.append(x)
 
-    MSE *= 1 / D.X.shape[0]
+    MSE *= 1 / X.shape[0]
 
     return MSE, u
 
@@ -97,7 +97,7 @@ def eval_MSE_sol(
 def predict(
     individuals_str: list[str],
     toolbox,
-    D: Dataset,
+    X_test,
     S: SimplicialComplex,
     u_0: C.CochainP0,
     penalty: dict,
@@ -108,7 +108,7 @@ def predict(
     u = [None] * len(individuals_str)
 
     for i, ind in enumerate(callables):
-        _, u[i] = eval_MSE_sol(ind, D, S, u_0)
+        _, u[i] = eval_MSE_sol(ind, X_test, None, S, u_0)
 
     return u
 
@@ -117,7 +117,8 @@ def predict(
 def score(
     individuals_str: list[str],
     toolbox,
-    D: Dataset,
+    X_test,
+    y_test,
     S: SimplicialComplex,
     u_0: C.CochainP0,
     penalty: dict,
@@ -128,7 +129,7 @@ def score(
     MSE = [None] * len(individuals_str)
 
     for i, ind in enumerate(callables):
-        MSE[i], _ = eval_MSE_sol(ind, D, S, u_0)
+        MSE[i], _ = eval_MSE_sol(ind, X_test, y_test, S, u_0)
 
     return MSE
 
@@ -137,7 +138,8 @@ def score(
 def fitness(
     individuals_str: list[str],
     toolbox,
-    D: Dataset,
+    X_train,
+    y_train,
     S: SimplicialComplex,
     u_0: C.CochainP0,
     penalty: dict,
@@ -148,7 +150,7 @@ def fitness(
 
     fitnesses = [None] * len(individuals_str)
     for i, ind in enumerate(callables):
-        MSE, _ = eval_MSE_sol(ind, D, S, u_0)
+        MSE, _ = eval_MSE_sol(ind, X_train, y_train, S, u_0)
 
         # add penalty on length of the tree to promote simpler solutions
         fitnesses[i] = (MSE + penalty["reg_param"] * indlen[i],)
@@ -219,11 +221,11 @@ def test_poisson1d(set_test_dir, yamlfile):
 
     train_data = Dataset("D", X_train, y_train)
 
-    gpsr.fit(train_data, val_data=train_data)
+    gpsr.fit(X_train, y_train, X_val=X_train, y_val=y_train)
 
-    u_best = gpsr.predict(train_data)
+    u_best = gpsr.predict(X_train)
 
-    fit_score = gpsr.score(train_data)
+    fit_score = gpsr.score(X_train, y_train)
 
     gpsr.save_best_test_sols(train_data, "./")
 

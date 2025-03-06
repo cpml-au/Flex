@@ -11,6 +11,7 @@ import os
 import ray
 import random
 from itertools import chain
+from sklearn.base import BaseEstimator, RegressorMixin
 
 # reducing the number of threads launched by fitness evaluations
 os.environ["MKL_NUM_THREADS"] = "1"
@@ -24,7 +25,7 @@ os.environ["XLA_FLAGS"] = (
 )
 
 
-class GPSymbolicRegressor:
+class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
     """Symbolic regression problem via Genetic Programming.
 
     Args:
@@ -130,7 +131,7 @@ class GPSymbolicRegressor:
 
         if common_data is not None:
             # FIXME: does everything work when the functions do not have common args?
-            self.store_fit_error_common_args(common_data)
+            self.__store_fit_error_common_args(common_data)
 
         self.NINDIVIDUALS = NINDIVIDUALS
         self.NGEN = NGEN
@@ -161,9 +162,6 @@ class GPSymbolicRegressor:
 
         # config individual creator and toolbox
         self.__creator_toolbox_config()
-        # self.createIndividual = individualCreator
-
-        # self.toolbox = toolbox
 
         self.seed = seed
 
@@ -253,7 +251,7 @@ class GPSymbolicRegressor:
 
         self.createIndividual = createIndividual
 
-    def store_fit_error_common_args(self, data: Dict):
+    def __store_fit_error_common_args(self, data: Dict):
         """Store names and values of the arguments that are in common between
         the fitness and the error metric functions in the common object space.
 
@@ -262,7 +260,7 @@ class GPSymbolicRegressor:
         """
         self.__store_shared_objects("common", data)
 
-    def store_datasets(self, datasets: Dict[str, Dataset]):
+    def __store_datasets(self, datasets: Dict[str, Dataset]):
         """Store datasets with the corresponding label ("train", "val" or "test")
         in the common object space. The datasets are passed as parameters to
         the fitness, and possibly to the error metric and the prediction functions.
@@ -272,12 +270,12 @@ class GPSymbolicRegressor:
                 the validation and the test datasets, respectively. The associated
                 values are `Dataset` objects.
         """
-        for dataset_label in datasets.keys():
-            dataset_name_data = {datasets[dataset_label].name: datasets[dataset_label]}
-            self.__store_shared_objects(dataset_label, dataset_name_data)
+        for dataset_label, dataset_data in datasets.items():
+            self.__store_shared_objects(dataset_label, dataset_data)
 
     def __store_shared_objects(self, label: str, data: Dict):
         for key, value in data.items():
+            # replace each item of the dataset with its obj ref
             data[key] = ray.put(value)
         self.data_store[label] = data
 
@@ -414,31 +412,35 @@ class GPSymbolicRegressor:
         toolbox_ref = ray.put(self.toolbox)
         self.toolbox.register("map", mapper, toolbox_ref=toolbox_ref)
 
-    def fit(self, train_data: Dataset, val_data: Dataset | None = None):
+    def fit(self, X_train, y_train=None, X_val=None, y_val=None):
         """Fits the training data using GP-based symbolic regression."""
-        if self.validate and val_data is not None:
+        train_data = {"X_train": X_train, "y_train": y_train}
+        if self.validate and X_val is not None:
+            val_data = {"X_val": X_val, "y_val": y_val}
             datasets = {"train": train_data, "val": val_data}
         else:
             datasets = {"train": train_data}
-        self.store_datasets(datasets)
+        self.__store_datasets(datasets)
         self.__register_fitness_func()
         if self.validate and self.error_metric is not None:
             self.__register_val_funcs()
         self.__run()
 
-    def predict(self, test_data: Dataset):
+    def predict(self, X_test):
+        test_data = {"X_test": X_test}
         datasets = {"test": test_data}
-        self.store_datasets(datasets)
+        self.__store_datasets(datasets)
         self.__register_predict_func()
         u_best = self.toolbox.map(self.toolbox.evaluate_test_sols, (self.best,))[0]
         return u_best
 
-    def score(self, test_data: Dataset):
+    def score(self, X_test, y_test):
         """Computes the error metric (passed to the `GPSymbolicRegressor` constructor)
         on a given dataset.
         """
+        test_data = {"X_test": X_test, "y_test": y_test}
         datasets = {"test": test_data}
-        self.store_datasets(datasets)
+        self.__store_datasets(datasets)
         self.__register_score_func()
         score = self.toolbox.map(self.toolbox.evaluate_test_score, (self.best,))[0]
         return score

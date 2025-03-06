@@ -1,7 +1,7 @@
 # import matplotlib.pyplot as plt
 from deap import gp
 
-from alpine.gp import gpsymbreg as gps
+from alpine.gp import regressor as gps
 from alpine.data import Dataset
 from alpine.gp import util
 import numpy as np

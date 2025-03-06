@@ -1,5 +1,5 @@
 from deap import gp
-from alpine.gp.gpsymbreg import GPSymbolicRegressor
+from alpine.gp.regressor import GPSymbolicRegressor
 from alpine.data import Dataset
 import numpy as np
 import ray
@@ -39,44 +39,44 @@ def get_features_batch(
     return individ_length, nested_trigs, num_trigs
 
 
-def eval_MSE_sol(individual, true_data):
+def eval_MSE_sol(individual, X, y):
     warnings.filterwarnings("ignore")
 
-    y_pred = individual(true_data.X)
-    MSE = np.mean(np.square(y_pred - true_data.y))
+    y_pred = individual(X)
+    MSE = np.mean(np.square(y_pred - y))
     if np.isnan(MSE):
         MSE = 1e5
     return MSE, y_pred
 
 
 @ray.remote
-def predict(individuals_str, toolbox, true_data, penalty):
+def predict(individuals_str, toolbox, X_test, penalty):
 
     callables = compile_individuals(toolbox, individuals_str)
 
     u = [None] * len(individuals_str)
 
     for i, ind in enumerate(callables):
-        _, u[i] = eval_MSE_sol(ind, true_data)
+        _, u[i] = eval_MSE_sol(ind, X_test, None)
 
     return u
 
 
 @ray.remote
-def score(individuals_str, toolbox, true_data, penalty):
+def score(individuals_str, toolbox, X_test, y_test, penalty):
 
     callables = compile_individuals(toolbox, individuals_str)
 
     MSE = [None] * len(individuals_str)
 
     for i, ind in enumerate(callables):
-        MSE[i], _ = eval_MSE_sol(ind, true_data)
+        MSE[i], _ = eval_MSE_sol(ind, X_test, y_test)
 
     return MSE
 
 
 @ray.remote
-def fitness(individuals_str, toolbox, true_data, penalty):
+def fitness(individuals_str, toolbox, X_train, y_train, penalty):
     callables = compile_individuals(toolbox, individuals_str)
 
     individ_length, nested_trigs, num_trigs = get_features_batch(individuals_str)
@@ -86,7 +86,7 @@ def fitness(individuals_str, toolbox, true_data, penalty):
         if individ_length[i] >= 50:
             fitnesses[i] = (1e8,)
         else:
-            MSE, _ = eval_MSE_sol(ind, true_data)
+            MSE, _ = eval_MSE_sol(ind, X_train, y_train)
 
             fitnesses[i] = (
                 MSE
@@ -145,8 +145,7 @@ def main():
         batch_size=100,
     )
 
-    train_data = Dataset("true_data", x, y)
-    gpsr.fit(train_data)
+    gpsr.fit(x, y)
 
     ray.shutdown()
 

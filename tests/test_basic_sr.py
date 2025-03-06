@@ -1,7 +1,7 @@
 import os
 from dctkit import config
 from deap import gp
-from alpine.gp.gpsymbreg import GPSymbolicRegressor
+from alpine.gp.regressor import GPSymbolicRegressor
 from alpine.data import Dataset
 from alpine.gp import util
 import jax.numpy as jnp
@@ -21,53 +21,56 @@ x = jnp.array([x / 10.0 for x in range(-10, 10)])
 y = x**4 + x**3 + x**2 + x
 
 
-def eval_MSE_sol(individual, true_data):
+def eval_MSE_sol(individual, X, y):
     import os
 
     os.environ["JAX_PLATFORMS"] = "cpu"
     config()
     # Evaluate the mean squared error between the expression
     # and the real function : x**4 + x**3 + x**2 + x
-    y_pred = individual(true_data.X)
-    MSE = jnp.sum(jnp.square(y_pred - true_data.y)) / len(true_data.X)
-    if jnp.isnan(MSE):
-        MSE = 1e5
+    y_pred = individual(X)
+    MSE = None
+
+    if y is not None:
+        MSE = jnp.mean(jnp.sum(jnp.square(y_pred - y)))
+        MSE = jnp.nan_to_num(MSE, nan=1e5)
+
     return MSE, y_pred
 
 
 @ray.remote
-def predict(individuals_str, toolbox, true_data):
+def predict(individuals_str, toolbox, X_test):
 
     callables = compile_individuals(toolbox, individuals_str)
 
     u = [None] * len(individuals_str)
 
     for i, ind in enumerate(callables):
-        _, u[i] = eval_MSE_sol(ind, true_data)
+        _, u[i] = eval_MSE_sol(ind, X_test, None)
 
     return u
 
 
 @ray.remote
-def score(individuals_str, toolbox, true_data):
+def score(individuals_str, toolbox, X_test, y_test):
 
     callables = compile_individuals(toolbox, individuals_str)
 
     MSE = [None] * len(individuals_str)
 
     for i, ind in enumerate(callables):
-        MSE[i], _ = eval_MSE_sol(ind, true_data)
+        MSE[i], _ = eval_MSE_sol(ind, X_test, y_test)
 
     return MSE
 
 
 @ray.remote
-def fitness(individuals_str, toolbox, true_data):
+def fitness(individuals_str, toolbox, X_train, y_train):
     callables = compile_individuals(toolbox, individuals_str)
 
     fitnesses = [None] * len(individuals_str)
     for i, ind in enumerate(callables):
-        MSE, _ = eval_MSE_sol(ind, true_data)
+        MSE, _ = eval_MSE_sol(ind, X_train, y_train)
 
         fitnesses[i] = (MSE,)
 
@@ -110,10 +113,12 @@ def test_basic_sr(set_test_dir):
         **regressor_params
     )
 
-    train_data = Dataset("true_data", x, y)
-    gpsr.fit(train_data)
+    # train_data = Dataset("true_data", x, y)
+    gpsr.fit(x, y)
 
-    fit_score = gpsr.score(train_data)
+    fit_score = gpsr.score(x, y)
+
+    y_pred = gpsr.predict(x)
 
     ray.shutdown()
 
