@@ -88,13 +88,14 @@ def eval_MSE_sol(individual, X, y):
    arguments in the first three positions:
    - the list of trees to be evaluated by the current worker;
    - the `toolbox` object used to compile the individual trees into callable functions;
-   - the dataset features needed for the evaluation of the individuals. The name of the argument **must** be `X`.
-   Additionally, the fourth argument of the **fitness** function **must** be the dataset
-   labels, called `y`. For unsupervised problems, `None` can be passed for the labels to the `fit`
-   method of the regressor.
-   Both functions **must** be decorated with `ray.remote` to support
-   distributed evaluation (multiprocessing). Any additional arguments can be set using
-   the `common_data` argument of the `GPSymbolicRegressor` object (see below). 
+   - the dataset features needed for the evaluation of the individuals. The name of the
+     argument **must** be `X`.
+
+Additionally, the fourth argument of the **fitness** function **must** be the dataset
+labels, called `y`. For unsupervised problems, `None` can be passed for the labels to
+the `fit` method of the regressor. Both functions **must** be decorated with `ray.remote` to support
+distributed evaluation (multiprocessing). Any additional arguments can be set using
+the `common_data` argument of the `GPSymbolicRegressor` object (see below). 
 ```python
 @ray.remote
 def predict(trees, toolbox, X):
