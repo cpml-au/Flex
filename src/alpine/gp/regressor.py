@@ -738,7 +738,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         if self.validate:
             np.save(join(output_path, "val_fit_history.npy"), self.val_fit_history)
 
-    def save_best_test_sols(self, test_data: Dataset, output_path: str):
+    def save_best_test_sols(self, X_test, output_path: str):
         """Compute and save the predictions corresponding to the best individual
         at the end of the evolution, evaluated over the test dataset.
 
@@ -747,7 +747,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             output_path: path where the predictions should be saved (one .npy file for
                 each sample in the test dataset).
         """
-        best_test_sols = self.predict(test_data)
+        best_test_sols = self.predict(X_test)
 
         for i, sol in enumerate(best_test_sols):
             np.save(join(output_path, "best_sol_test_" + str(i) + ".npy"), sol)

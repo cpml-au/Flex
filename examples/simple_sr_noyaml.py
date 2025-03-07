@@ -1,6 +1,5 @@
 from deap import gp
 from alpine.gp.regressor import GPSymbolicRegressor
-from alpine.data import Dataset
 import numpy as np
 import ray
 import warnings
@@ -50,33 +49,33 @@ def eval_MSE_sol(individual, X, y):
 
 
 @ray.remote
-def predict(individuals_str, toolbox, X_test, penalty):
+def predict(individuals_str, toolbox, X, penalty):
 
     callables = compile_individuals(toolbox, individuals_str)
 
     u = [None] * len(individuals_str)
 
     for i, ind in enumerate(callables):
-        _, u[i] = eval_MSE_sol(ind, X_test, None)
+        _, u[i] = eval_MSE_sol(ind, X, None)
 
     return u
 
 
 @ray.remote
-def score(individuals_str, toolbox, X_test, y_test, penalty):
+def score(individuals_str, toolbox, X, y, penalty):
 
     callables = compile_individuals(toolbox, individuals_str)
 
     MSE = [None] * len(individuals_str)
 
     for i, ind in enumerate(callables):
-        MSE[i], _ = eval_MSE_sol(ind, X_test, y_test)
+        MSE[i], _ = eval_MSE_sol(ind, X, y)
 
     return MSE
 
 
 @ray.remote
-def fitness(individuals_str, toolbox, X_train, y_train, penalty):
+def fitness(individuals_str, toolbox, X, y, penalty):
     callables = compile_individuals(toolbox, individuals_str)
 
     individ_length, nested_trigs, num_trigs = get_features_batch(individuals_str)
@@ -86,7 +85,7 @@ def fitness(individuals_str, toolbox, X_train, y_train, penalty):
         if individ_length[i] >= 50:
             fitnesses[i] = (1e8,)
         else:
-            MSE, _ = eval_MSE_sol(ind, X_train, y_train)
+            MSE, _ = eval_MSE_sol(ind, X, y)
 
             fitnesses[i] = (
                 MSE

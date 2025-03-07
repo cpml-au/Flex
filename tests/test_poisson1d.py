@@ -4,7 +4,6 @@ from dctkit.mesh.util import generate_line_mesh, build_complex_from_mesh
 from dctkit.math.opt import optctrl as oc
 from deap import gp
 from alpine.gp import regressor as gps
-from alpine.data import Dataset
 from dctkit import config
 import dctkit
 import numpy as np
@@ -229,7 +228,7 @@ def test_poisson1d(set_test_dir, yamlfile):
 
     fit_score = gpsr.score(X_train, y_train)
 
-    # gpsr.save_best_test_sols(train_data, "./")
+    gpsr.save_best_test_sols(X_train, "./")
 
     ray.shutdown()
     assert np.allclose(u.coeffs.flatten(), np.ravel(u_best))

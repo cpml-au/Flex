@@ -2,7 +2,6 @@ import os
 from dctkit import config
 from deap import gp
 from alpine.gp.regressor import GPSymbolicRegressor
-from alpine.data import Dataset
 from alpine.gp import util
 import jax.numpy as jnp
 import ray
@@ -113,12 +112,9 @@ def test_basic_sr(set_test_dir):
         **regressor_params
     )
 
-    # train_data = Dataset("true_data", x, y)
     gpsr.fit(x, y)
 
     fit_score = gpsr.score(x, y)
-
-    y_pred = gpsr.predict(x)
 
     ray.shutdown()
 
