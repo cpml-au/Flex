@@ -27,3 +27,4 @@ dependencies:
       - tox
       - mygrad
       - tox-conda
+      - pmlb

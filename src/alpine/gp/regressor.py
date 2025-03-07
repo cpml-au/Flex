@@ -414,9 +414,9 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
 
     def fit(self, X_train, y_train=None, X_val=None, y_val=None):
         """Fits the training data using GP-based symbolic regression."""
-        train_data = {"X_train": X_train, "y_train": y_train}
+        train_data = {"X": X_train, "y": y_train}
         if self.validate and X_val is not None:
-            val_data = {"X_val": X_val, "y_val": y_val}
+            val_data = {"X": X_val, "y": y_val}
             datasets = {"train": train_data, "val": val_data}
         else:
             datasets = {"train": train_data}
@@ -427,7 +427,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         self.__run()
 
     def predict(self, X_test):
-        test_data = {"X_test": X_test}
+        test_data = {"X": X_test}
         datasets = {"test": test_data}
         self.__store_datasets(datasets)
         self.__register_predict_func()
@@ -438,7 +438,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         """Computes the error metric (passed to the `GPSymbolicRegressor` constructor)
         on a given dataset.
         """
-        test_data = {"X_test": X_test, "y_test": y_test}
+        test_data = {"X": X_test, "y": y_test}
         datasets = {"test": test_data}
         self.__store_datasets(datasets)
         self.__register_score_func()

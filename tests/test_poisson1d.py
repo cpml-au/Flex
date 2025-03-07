@@ -37,7 +37,7 @@ def eval_MSE_sol(
     residual: Callable, X, y, S: SimplicialComplex, u_0: C.CochainP0
 ) -> float:
 
-    num_nodes = X.shape[1]
+    num_nodes = S.num_nodes
 
     # need to call config again before using JAX in energy evaluations to make sure that
     # the current worker has initialized JAX
@@ -57,47 +57,48 @@ def eval_MSE_sol(
 
     MSE = 0.0
 
-    u = []
+    us = []
 
-    for i, curr_y in enumerate(y):
+    for i, curr_force in enumerate(X):
         # set additional arguments of the objective function
         # (apart from the vector of unknowns)
-        args = {"y": curr_y}
+        args = {"y": curr_force}
         prb.set_obj_args(args)
 
         # minimize the objective
-        x = prb.solve(
+        u = prb.solve(
             x0=u_0.coeffs.flatten(), ftol_abs=1e-12, ftol_rel=1e-12, maxeval=1000
         )
 
-        if (
-            prb.last_opt_result == 1
-            or prb.last_opt_result == 3
-            or prb.last_opt_result == 4
-        ):
+        if y is not None:
+            if (
+                prb.last_opt_result == 1
+                or prb.last_opt_result == 3
+                or prb.last_opt_result == 4
+            ):
 
-            current_err = np.linalg.norm(x - X[i, :]) ** 2
-        else:
-            current_err = math.nan
+                current_err = np.linalg.norm(u - y[i, :]) ** 2
+            else:
+                current_err = math.nan
 
-        if math.isnan(current_err):
-            MSE = 1e5
-            break
+            if math.isnan(current_err):
+                MSE = 1e5
+                break
 
-        MSE += current_err
+            MSE += current_err
 
-        u.append(x)
+        us.append(u)
 
-    MSE *= 1 / X.shape[0]
+    MSE *= 1 / num_nodes
 
-    return MSE, u
+    return MSE, us
 
 
 @ray.remote
 def predict(
     individuals_str: list[str],
     toolbox,
-    X_test,
+    X,
     S: SimplicialComplex,
     u_0: C.CochainP0,
     penalty: dict,
@@ -108,7 +109,7 @@ def predict(
     u = [None] * len(individuals_str)
 
     for i, ind in enumerate(callables):
-        _, u[i] = eval_MSE_sol(ind, X_test, None, S, u_0)
+        _, u[i] = eval_MSE_sol(ind, X, None, S, u_0)
 
     return u
 
@@ -117,8 +118,8 @@ def predict(
 def score(
     individuals_str: list[str],
     toolbox,
-    X_test,
-    y_test,
+    X,
+    y,
     S: SimplicialComplex,
     u_0: C.CochainP0,
     penalty: dict,
@@ -129,7 +130,7 @@ def score(
     MSE = [None] * len(individuals_str)
 
     for i, ind in enumerate(callables):
-        MSE[i], _ = eval_MSE_sol(ind, X_test, y_test, S, u_0)
+        MSE[i], _ = eval_MSE_sol(ind, X, y, S, u_0)
 
     return MSE
 
@@ -138,8 +139,8 @@ def score(
 def fitness(
     individuals_str: list[str],
     toolbox,
-    X_train,
-    y_train,
+    X,
+    y,
     S: SimplicialComplex,
     u_0: C.CochainP0,
     penalty: dict,
@@ -150,7 +151,7 @@ def fitness(
 
     fitnesses = [None] * len(individuals_str)
     for i, ind in enumerate(callables):
-        MSE, _ = eval_MSE_sol(ind, X_train, y_train, S, u_0)
+        MSE, _ = eval_MSE_sol(ind, X, y, S, u_0)
 
         # add penalty on length of the tree to promote simpler solutions
         fitnesses[i] = (MSE + penalty["reg_param"] * indlen[i],)
@@ -181,8 +182,9 @@ def test_poisson1d(set_test_dir, yamlfile):
     # Delta u + f = 0, where Delta is the discrete Laplace-de Rham operator
     f = C.laplacian(u)
     f.coeffs *= -1.0
-    X_train = np.array([u.coeffs.flatten()], dtype=dctkit.float_dtype)
-    y_train = np.array([f.coeffs.flatten()], dtype=dctkit.float_dtype)
+
+    X_train = np.array([f.coeffs.flatten()], dtype=dctkit.float_dtype)
+    y_train = np.array([u.coeffs.flatten()], dtype=dctkit.float_dtype)
 
     # initial guess for the unknown of the Poisson problem (cochain of nodals values)
     u_0_vec = np.zeros(num_nodes, dtype=dctkit.float_dtype)
@@ -219,7 +221,7 @@ def test_poisson1d(set_test_dir, yamlfile):
         **regressor_params
     )
 
-    train_data = Dataset("D", X_train, y_train)
+    # train_data = Dataset("D", X_train, y_train)
 
     gpsr.fit(X_train, y_train, X_val=X_train, y_val=y_train)
 
@@ -227,7 +229,7 @@ def test_poisson1d(set_test_dir, yamlfile):
 
     fit_score = gpsr.score(X_train, y_train)
 
-    gpsr.save_best_test_sols(train_data, "./")
+    # gpsr.save_best_test_sols(train_data, "./")
 
     ray.shutdown()
     assert np.allclose(u.coeffs.flatten(), np.ravel(u_best))

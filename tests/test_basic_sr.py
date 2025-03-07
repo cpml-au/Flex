@@ -39,38 +39,38 @@ def eval_MSE_sol(individual, X, y):
 
 
 @ray.remote
-def predict(individuals_str, toolbox, X_test):
+def predict(individuals_str, toolbox, X):
 
     callables = compile_individuals(toolbox, individuals_str)
 
     u = [None] * len(individuals_str)
 
     for i, ind in enumerate(callables):
-        _, u[i] = eval_MSE_sol(ind, X_test, None)
+        _, u[i] = eval_MSE_sol(ind, X, None)
 
     return u
 
 
 @ray.remote
-def score(individuals_str, toolbox, X_test, y_test):
+def score(individuals_str, toolbox, X, y):
 
     callables = compile_individuals(toolbox, individuals_str)
 
     MSE = [None] * len(individuals_str)
 
     for i, ind in enumerate(callables):
-        MSE[i], _ = eval_MSE_sol(ind, X_test, y_test)
+        MSE[i], _ = eval_MSE_sol(ind, X, y)
 
     return MSE
 
 
 @ray.remote
-def fitness(individuals_str, toolbox, X_train, y_train):
+def fitness(individuals_str, toolbox, X, y):
     callables = compile_individuals(toolbox, individuals_str)
 
     fitnesses = [None] * len(individuals_str)
     for i, ind in enumerate(callables):
-        MSE, _ = eval_MSE_sol(ind, X_train, y_train)
+        MSE, _ = eval_MSE_sol(ind, X, y)
 
         fitnesses[i] = (MSE,)
 
