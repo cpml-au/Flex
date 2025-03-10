@@ -2,11 +2,9 @@
 from deap import gp
 
 from alpine.gp import regressor as gps
-from alpine.data import Dataset
 from alpine.gp import util
 import numpy as np
 import ray
-import yaml
 
 import time
 
@@ -33,15 +31,15 @@ def check_nested_trig_fn(ind):
     return util.detect_nested_trigonometric_functions(str(ind))
 
 
-def eval_model(individual, D, consts=[]):
+def eval_model(individual, X, consts=[]):
     warnings.filterwarnings("ignore")
-    y_pred = individual(*D.X, consts)
+    y_pred = individual(*X, consts)
     return y_pred
 
 
-def compute_MSE(individual, D, consts=[]):
-    y_pred = eval_model(individual, D, consts)
-    MSE = np.mean((D.y - y_pred) ** 2)
+def compute_MSE(individual, X, y, consts=[]):
+    y_pred = eval_model(individual, X, consts)
+    MSE = np.mean((y - y_pred) ** 2)
 
     if np.isnan(MSE) or np.isinf(MSE):
         MSE = 1e8
@@ -66,7 +64,7 @@ def compile_individual_with_consts(tree, toolbox, special_term_name="a"):
     return individual, const_idx
 
 
-def eval_MSE_and_tune_constants(tree, toolbox, D):
+def eval_MSE_and_tune_constants(tree, toolbox, X, y):
     individual, num_consts = compile_individual_with_consts(tree, toolbox)
 
     if num_consts > 0:
@@ -75,8 +73,8 @@ def eval_MSE_and_tune_constants(tree, toolbox, D):
         # outside?
         def eval_MSE(consts):
             warnings.filterwarnings("ignore")
-            y_pred = individual(*D.X, consts)
-            total_err = np.mean((D.y - y_pred) ** 2)
+            y_pred = individual(*X, consts)
+            total_err = np.mean((y - y_pred) ** 2)
 
             return total_err
 
@@ -113,7 +111,7 @@ def eval_MSE_and_tune_constants(tree, toolbox, D):
         if np.isinf(MSE) or np.isnan(MSE):
             MSE = 1e8
     else:
-        MSE = compute_MSE(individual, D)
+        MSE = compute_MSE(individual, X, y)
         consts = []
     return MSE, consts
 
@@ -133,31 +131,31 @@ def get_features_batch(
 
 
 @ray.remote(num_cpus=num_cpus)
-def predict(individuals_str_batch, toolbox, dataset, penalty, fitness_scale):
+def predict(individuals_str_batch, toolbox, X, penalty, fitness_scale):
 
     predictions = [None] * len(individuals_str_batch)
 
     for i, tree in enumerate(individuals_str_batch):
         callable, _ = compile_individual_with_consts(tree, toolbox)
-        predictions[i] = eval_model(callable, dataset, consts=tree.consts)
+        predictions[i] = eval_model(callable, X, consts=tree.consts)
 
     return predictions
 
 
 @ray.remote(num_cpus=num_cpus)
-def compute_MSEs(individuals_str_batch, toolbox, dataset, penalty, fitness_scale):
+def compute_MSEs(individuals_str_batch, toolbox, X, y, penalty, fitness_scale):
 
     total_errs = [None] * len(individuals_str_batch)
 
     for i, tree in enumerate(individuals_str_batch):
         callable, _ = compile_individual_with_consts(tree, toolbox)
-        total_errs[i] = compute_MSE(callable, dataset, consts=tree.consts)
+        total_errs[i] = compute_MSE(callable, X, y, consts=tree.consts)
 
     return total_errs
 
 
 @ray.remote(num_cpus=num_cpus)
-def compute_attributes(individuals_str_batch, toolbox, dataset, penalty, fitness_scale):
+def compute_attributes(individuals_str_batch, toolbox, X, y, penalty, fitness_scale):
 
     attributes = [None] * len(individuals_str_batch)
 
@@ -170,7 +168,7 @@ def compute_attributes(individuals_str_batch, toolbox, dataset, penalty, fitness
             consts = None
             fitness = (1e8,)
         else:
-            MSE, consts = eval_MSE_and_tune_constants(tree, toolbox, dataset)
+            MSE, consts = eval_MSE_and_tune_constants(tree, toolbox, X, y)
             fitness = (
                 fitness_scale
                 * (
@@ -192,8 +190,7 @@ def assign_attributes(individuals, attributes):
 
 def eval(problem, cfgfile, seed=42):
 
-    with open(cfgfile) as config_file:
-        config_file_data = yaml.safe_load(config_file)
+    regressor_params, config_file_data = util.load_config_data(cfgfile)
 
     scaleXy = config_file_data["gp"]["scaleXy"]
 
@@ -218,6 +215,10 @@ def eval(problem, cfgfile, seed=42):
         pset.renameArguments(ARG1="y")
     else:
         pset = gp.PrimitiveSetTyped("Main", [float] * num_variables, float)
+
+    pset = util.add_primitives_to_pset_from_dict(
+        pset, config_file_data["gp"]["primitives"]
+    )
 
     batch_size = config_file_data["gp"]["batch_size"]
     if config_file_data["gp"]["use_constants"]:
@@ -244,25 +245,25 @@ def eval(problem, cfgfile, seed=42):
         callback_func=callback_func,
         print_log=False,
         num_best_inds_str=1,
-        config_file_data=config_file_data,
         save_best_individual=False,
         output_path="./",
         seed=None,
         batch_size=batch_size,
+        **regressor_params,
     )
 
-    train_data = Dataset("dataset", X_train_scaled, y_train_scaled)
-    test_data = Dataset("dataset", X_test_scaled, y_test)
+    # train_data = Dataset("dataset", X_train_scaled, y_train_scaled)
+    # test_data = Dataset("dataset", X_test_scaled, y_test)
 
     if num_variables > 1:
-        train_data.X = [train_data.X[:, i] for i in range(num_variables)]
-        test_data.X = [test_data.X[:, i] for i in range(num_variables)]
+        X_train = [X_train_scaled[:, i] for i in range(num_variables)]
+        X_test = [X_test_scaled[:, i] for i in range(num_variables)]
     else:
-        train_data.X = [train_data.X]
-        test_data.X = [test_data.X]
+        X_train = [X_train_scaled]
+        X_test = [X_test_scaled]
 
     tic = time.time()
-    gpsr.fit(train_data)
+    gpsr.fit(X_train, y_train_scaled)
     toc = time.time()
 
     if hasattr(gpsr.best, "consts"):
@@ -274,7 +275,7 @@ def eval(problem, cfgfile, seed=42):
     )
     print("Individuals per sec = ", individuals_per_sec)
 
-    u_best = gpsr.predict(test_data)
+    u_best = gpsr.predict(X_test)
     # print(u_best)
     # print(y_test)
 
@@ -292,7 +293,7 @@ def eval(problem, cfgfile, seed=42):
     print("MSE on the test set = ", MSE)
     print("R^2 on the test set = ", r2_test)
 
-    pred_train = gpsr.predict(train_data)
+    pred_train = gpsr.predict(X_train)
 
     if scaleXy:
         pred_train = scaler_y.inverse_transform(pred_train.reshape(-1, 1)).flatten()
