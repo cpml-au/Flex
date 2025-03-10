@@ -104,7 +104,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         output_path: str | None = None,
         batch_size=1,
     ):
-
+        super().__init__()
         self.pset = pset
 
         self.fitness = fitness
@@ -122,16 +122,14 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         self.num_best_inds_str = num_best_inds_str
         self.plot_freq = plot_freq
         self.preprocess_func = preprocess_func
-        self.callback_fun = callback_func
+        self.callback_func = callback_func
         self.is_plot_best_individual_tree = plot_best_individual_tree
         self.is_save_best_individual = save_best_individual
         self.is_save_train_fit_history = save_train_fit_history
         self.output_path = output_path
         self.batch_size = batch_size
 
-        if common_data is not None:
-            # FIXME: does everything work when the functions do not have common args?
-            self.__store_fit_error_common_args(common_data)
+        self.common_data = common_data
 
         self.NINDIVIDUALS = NINDIVIDUALS
         self.NGEN = NGEN
@@ -157,8 +155,14 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         self.overlapping_generation = overlapping_generation
         self.validate = validate
 
+        self.frac_elitist = frac_elitist
+
         # Elitism settings
-        self.n_elitist = int(frac_elitist * self.NINDIVIDUALS)
+        self.n_elitist = int(self.frac_elitist * self.NINDIVIDUALS)
+
+        if self.common_data is not None:
+            # FIXME: does everything work when the functions do not have common args?
+            self.__store_fit_error_common_args(self.common_data)
 
         # config individual creator and toolbox
         self.__creator_toolbox_config()
@@ -195,6 +199,9 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
 
         self.plot_initialized = False
         self.fig_id = 0
+
+    def get_params(self, deep=True):
+        return self.__dict__
 
     def __creator_toolbox_config(self):
         """Initialize toolbox and individual creator based on config file."""
@@ -276,7 +283,8 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
     def __store_shared_objects(self, label: str, data: Dict):
         for key, value in data.items():
             # replace each item of the dataset with its obj ref
-            data[key] = ray.put(value)
+            if not isinstance(value, ray.ObjectRef):
+                data[key] = ray.put(value)
         self.data_store[label] = data
 
     def __init_logbook(self):
@@ -425,6 +433,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         if self.validate and self.error_metric is not None:
             self.__register_val_funcs()
         self.__run()
+        return self
 
     def predict(self, X_test):
         test_data = {"X": X_test}
@@ -567,8 +576,8 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         fitnesses = self.__unflatten_list(fitnesses, [len(i) for i in invalid_inds])
 
         for i in range(self.num_islands):
-            if self.callback_fun is not None:
-                self.callback_fun(invalid_inds[i], fitnesses[i])
+            if self.callback_func is not None:
+                self.callback_func(invalid_inds[i], fitnesses[i])
             else:
                 for ind, fit in zip(invalid_inds[i], fitnesses[i]):
                     ind.fitness.values = fit
@@ -626,8 +635,8 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         for i in range(self.num_islands):
             fitnesses = self.toolbox.map(self.toolbox.evaluate_train, self.pop[i])
 
-            if self.callback_fun is not None:
-                self.callback_fun(self.pop[i], fitnesses)
+            if self.callback_func is not None:
+                self.callback_func(self.pop[i], fitnesses)
             else:
                 for ind, fit in zip(self.pop[i], fitnesses):
                     ind.fitness.values = fit
