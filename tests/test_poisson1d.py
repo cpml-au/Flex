@@ -228,7 +228,7 @@ def test_poisson1d(set_test_dir, yamlfile):
 
     fit_score = gpsr.score(X_train, y_train)
 
-    gpsr.save_best_test_sols(X_train, "./")
+    gpsr.__save_best_test_sols(X_train, "./")
 
     ray.shutdown()
     assert np.allclose(u.coeffs.flatten(), np.ravel(u_best))

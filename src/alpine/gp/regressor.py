@@ -111,8 +111,6 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         self.error_metric = error_metric
         self.predict_func = predict_func
 
-        self.data_store = dict()
-
         self.plot_best = plot_best
 
         self.plot_best_genealogy = plot_best_genealogy
@@ -123,9 +121,9 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         self.plot_freq = plot_freq
         self.preprocess_func = preprocess_func
         self.callback_func = callback_func
-        self.is_plot_best_individual_tree = plot_best_individual_tree
-        self.is_save_best_individual = save_best_individual
-        self.is_save_train_fit_history = save_train_fit_history
+        self.plot_best_individual_tree = plot_best_individual_tree
+        self.save_best_individual = save_best_individual
+        self.save_train_fit_history = save_train_fit_history
         self.output_path = output_path
         self.batch_size = batch_size
 
@@ -157,48 +155,14 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
 
         self.frac_elitist = frac_elitist
 
-        # Elitism settings
-        self.n_elitist = int(self.frac_elitist * self.NINDIVIDUALS)
-
-        if self.common_data is not None:
-            # FIXME: does everything work when the functions do not have common args?
-            self.__store_fit_error_common_args(self.common_data)
-
-        # config individual creator and toolbox
-        self.__creator_toolbox_config()
-
         self.seed = seed
 
         if self.seed is not None:
             self.seed = [self.createIndividual.from_string(i, pset) for i in seed]
 
-        # Initialize variables for statistics
-        self.stats_fit = tools.Statistics(lambda ind: ind.fitness.values)
-        self.stats_size = tools.Statistics(len)
-        self.mstats = tools.MultiStatistics(
-            fitness=self.stats_fit, size=self.stats_size
-        )
-        self.mstats.register("avg", lambda ind: np.around(np.mean(ind), 4))
-        self.mstats.register("std", lambda ind: np.around(np.std(ind), 4))
-        self.mstats.register("min", lambda ind: np.around(np.min(ind), 4))
-        self.mstats.register("max", lambda ind: np.around(np.max(ind), 4))
-
-        self.__init_logbook()
-
-        self.train_fit_history = []
-
-        # Create history object to build the genealogy tree
-        self.history = tools.History()
-
-        if self.plot_best_genealogy:
-            # Decorators for history
-            self.toolbox.decorate("mate", self.history.decorator)
-            self.toolbox.decorate("mutate", self.history.decorator)
-
-        self.__register_map()
-
-        self.plot_initialized = False
-        self.fig_id = 0
+    @property
+    def n_elitist(self):
+        return int(self.frac_elitist * self.NINDIVIDUALS)
 
     def get_params(self, deep=True):
         return self.__dict__
@@ -420,9 +384,48 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         toolbox_ref = ray.put(self.toolbox)
         self.toolbox.register("map", mapper, toolbox_ref=toolbox_ref)
 
-    def fit(self, X_train, y_train=None, X_val=None, y_val=None):
+    def fit(self, X, y=None, X_val=None, y_val=None):
         """Fits the training data using GP-based symbolic regression."""
-        train_data = {"X": X_train, "y": y_train}
+
+        if not hasattr(self, "_is_fitted"):
+            self.data_store = dict()
+
+            if self.common_data is not None:
+                # FIXME: does everything work when the functions do not have common args?
+                self.__store_fit_error_common_args(self.common_data)
+
+            # config individual creator and toolbox
+            self.__creator_toolbox_config()
+
+            # Initialize variables for statistics
+            self.stats_fit = tools.Statistics(lambda ind: ind.fitness.values)
+            self.stats_size = tools.Statistics(len)
+            self.mstats = tools.MultiStatistics(
+                fitness=self.stats_fit, size=self.stats_size
+            )
+            self.mstats.register("avg", lambda ind: np.around(np.mean(ind), 4))
+            self.mstats.register("std", lambda ind: np.around(np.std(ind), 4))
+            self.mstats.register("min", lambda ind: np.around(np.min(ind), 4))
+            self.mstats.register("max", lambda ind: np.around(np.max(ind), 4))
+
+            self.__init_logbook()
+
+            self.train_fit_history = []
+
+            # Create history object to build the genealogy tree
+            self.history = tools.History()
+
+            if self.plot_best_genealogy:
+                # Decorators for history
+                self.toolbox.decorate("mate", self.history.decorator)
+                self.toolbox.decorate("mutate", self.history.decorator)
+
+            self.__register_map()
+
+            self.plot_initialized = False
+            self.fig_id = 0
+
+        train_data = {"X": X, "y": y}
         if self.validate and X_val is not None:
             val_data = {"X": X_val, "y": y_val}
             datasets = {"train": train_data, "val": val_data}
@@ -433,6 +436,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         if self.validate and self.error_metric is not None:
             self.__register_val_funcs()
         self.__run()
+        self._is_fitted = True
         return self
 
     def predict(self, X_test):
@@ -443,18 +447,18 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         u_best = self.toolbox.map(self.toolbox.evaluate_test_sols, (self.best,))[0]
         return u_best
 
-    def score(self, X_test, y_test):
+    def score(self, X, y):
         """Computes the error metric (passed to the `GPSymbolicRegressor` constructor)
         on a given dataset.
         """
-        test_data = {"X": X_test, "y": y_test}
+        test_data = {"X": X, "y": y}
         datasets = {"test": test_data}
         self.__store_datasets(datasets)
         self.__register_score_func()
         score = self.toolbox.map(self.toolbox.evaluate_test_score, (self.best,))[0]
         return score
 
-    def immigration(self, pop, num_immigrants: int):
+    def __immigration(self, pop, num_immigrants: int):
         immigrants = self.toolbox.population(n=num_immigrants)
         for i in range(num_immigrants):
             idx_individual_to_replace = random.randint(0, self.NINDIVIDUALS - 1)
@@ -543,7 +547,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         for i in range(self.num_islands):
             if self.immigration_enabled:
                 if cgen % self.immigration_freq == 0:
-                    self.immigration(
+                    self.__immigration(
                         self.pop[i], int(self.immigration_frac * self.NINDIVIDUALS)
                     )
 
@@ -709,20 +713,20 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         if self.plot_best_genealogy:
             self.__plot_genealogy(self.best)
 
-        if self.is_plot_best_individual_tree:
-            self.plot_best_individual_tree()
+        if self.plot_best_individual_tree:
+            self.__plot_best_individual_tree()
 
-        if self.is_save_best_individual and self.output_path is not None:
-            self.save_best_individual(self.output_path)
+        if self.save_best_individual and self.output_path is not None:
+            self.__save_best_individual(self.output_path)
             print("String of the best individual saved to disk.")
 
-        if self.is_save_train_fit_history and self.output_path is not None:
-            self.save_train_fit_history(self.output_path)
+        if self.save_train_fit_history and self.output_path is not None:
+            self.__save_train_fit_history(self.output_path)
             print("Training fitness history saved to disk.")
 
         # NOTE: ray.shutdown should be manually called by the user
 
-    def plot_best_individual_tree(self):
+    def __plot_best_individual_tree(self):
         """Plots the tree of the best individual at the end of the evolution."""
         nodes, edges, labels = gp.graph(self.best)
         graph = nx.Graph()
@@ -736,13 +740,13 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         plt.axis("off")
         plt.show()
 
-    def save_best_individual(self, output_path: str):
+    def __save_best_individual(self, output_path: str):
         """Saves the string of the best individual of the population in a .txt file."""
         file = open(join(output_path, "best_ind.txt"), "w")
         file.write(str(self.best))
         file.close()
 
-    def save_train_fit_history(self, output_path: str):
+    def __save_train_fit_history(self, output_path: str):
         np.save(join(output_path, "train_fit_history.npy"), self.train_fit_history)
         if self.validate:
             np.save(join(output_path, "val_fit_history.npy"), self.val_fit_history)
