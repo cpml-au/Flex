@@ -4,7 +4,7 @@ from alpine.gp import util
 from deap import gp
 from sklearn.datasets import make_regression
 from sklearn.model_selection import train_test_split, GridSearchCV
-from alpine.gp.util import dummy_fitness, dummy_score
+from alpine.gp.util import dummy_fitness, dummy_score, dummy_predict
 
 
 def test_regressor():
@@ -37,9 +37,9 @@ def test_regressor():
 
     gpsr = GPSymbolicRegressor(
         pset=pset,
-        fitness=dummy_fitness.remote,
-        error_metric=dummy_score.remote,
-        predict_func=None,
+        fitness=dummy_fitness,
+        error_metric=dummy_score,
+        predict_func=dummy_predict,
         common_data=common_data,
         NINDIVIDUALS=100,
         num_islands=10,

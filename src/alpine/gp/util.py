@@ -1,7 +1,6 @@
 import yaml
 from .primitives import add_primitives_to_pset
 from importlib import import_module
-import ray
 
 
 def add_primitives_to_pset_from_dict(pset, primitives_dict):
@@ -94,16 +93,19 @@ def detect_nested_trigonometric_functions(equation):
     return nested
 
 
-@ray.remote
 def dummy_fitness(individuals_str, toolbox, X, y):
     fitnesses = [(0.0,)] * len(individuals_str)
 
     return fitnesses
 
 
-@ray.remote
 def dummy_score(individuals_str, toolbox, X, y):
 
     MSE = [0.0] * len(individuals_str)
 
     return MSE
+
+
+def dummy_predict(individuals_str, toolbox, X):
+    pred = [0.0] * len(individuals_str)
+    return pred

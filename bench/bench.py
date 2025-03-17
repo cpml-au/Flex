@@ -266,12 +266,12 @@ def eval(problem, cfgfile, seed=42):
     gpsr.fit(X_train, y_train_scaled)
     toc = time.time()
 
-    if hasattr(gpsr.best, "consts"):
-        print("Best parameters = ", gpsr.best.consts)
+    if hasattr(gpsr.__best, "consts"):
+        print("Best parameters = ", gpsr.__best.consts)
 
     print("Elapsed time = ", toc - tic)
     individuals_per_sec = (
-        (gpsr.cgen + 1) * gpsr.NINDIVIDUALS * gpsr.num_islands / (toc - tic)
+        (gpsr.__cgen + 1) * gpsr.NINDIVIDUALS * gpsr.num_islands / (toc - tic)
     )
     print("Individuals per sec = ", individuals_per_sec)
 
