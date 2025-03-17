@@ -237,7 +237,7 @@ def eval(problem, cfgfile, seed=42):
     common_params = {"penalty": penalty, "fitness_scale": fitness_scale}
 
     gpsr = gps.GPSymbolicRegressor(
-        pset=pset,
+        pset_config=pset,
         fitness=compute_attributes.remote,
         predict_func=predict.remote,
         error_metric=compute_MSEs.remote,

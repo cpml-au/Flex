@@ -36,7 +36,7 @@ def test_regressor():
     common_data = {}
 
     gpsr = GPSymbolicRegressor(
-        pset=pset,
+        pset_config=pset,
         fitness=dummy_fitness,
         error_metric=dummy_score,
         predict_func=dummy_predict,

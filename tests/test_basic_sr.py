@@ -102,7 +102,7 @@ def test_basic_sr(set_test_dir):
     ]
 
     gpsr = GPSymbolicRegressor(
-        pset=pset,
+        pset_config=pset,
         fitness=fitness.remote,
         error_metric=score.remote,
         predict_func=predict.remote,

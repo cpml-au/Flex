@@ -10,14 +10,10 @@ from alpine.data import Dataset
 import os
 import ray
 import random
-from itertools import chain
+from alpine.gp.util import mapper, add_primitives_to_pset_from_dict
 from sklearn.base import BaseEstimator, RegressorMixin, _fit_context
-from sklearn.utils.validation import (
-    check_is_fitted,
-    validate_data,
-    check_array,
-    check_X_y,
-)
+from sklearn.utils.validation import check_is_fitted
+
 
 # reducing the number of threads launched by fitness evaluations
 os.environ["MKL_NUM_THREADS"] = "1"
@@ -67,12 +63,12 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
 
     def __init__(
         self,
-        pset: gp.PrimitiveSet | gp.PrimitiveSetTyped,
+        pset_config: gp.PrimitiveSet | gp.PrimitiveSetTyped,
         fitness: Callable,
         select_fun: str = "tools.selection.tournament_with_elitism",
         select_args: str = "{'num_elitist': self.n_elitist, 'tournsize': 3, 'stochastic_tourn': { 'enabled': False, 'prob': [0.8, 0.2] }}",  # noqa: E501
         mut_fun: str = "gp.mutUniform",
-        mut_args: str = "{'expr': self._GPSymbolicRegressor__toolbox.expr_mut, 'pset': self.pset}",
+        mut_args: str = "{'expr': toolbox.expr_mut, 'pset': pset}",
         expr_mut_fun: str = "gp.genHalfAndHalf",
         expr_mut_args: str = "{'min_': 1, 'max_': 3}",
         crossover_fun: str = "gp.cxOnePoint",
@@ -111,7 +107,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         batch_size=1,
     ):
         super().__init__()
-        self.pset = pset
+        self.pset_config = pset_config
 
         self.fitness = fitness
         self.error_metric = error_metric
@@ -170,45 +166,68 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
     def get_params(self, deep=True):
         return self.__dict__
 
-    def __creator_toolbox_config(self):
+    def __pset_config(self):
+        pset = gp.PrimitiveSetTyped(
+            "MAIN",
+            [
+                float,
+            ],
+            float,
+        )
+        pset.renameArguments(ARG0="x")
+        primitives = {
+            "imports": {"alpine.gp.numpy_primitives": ["numpy_primitives"]},
+            "used": [
+                {"name": "add", "dimension": None, "rank": None},
+                {"name": "sub", "dimension": None, "rank": None},
+                {"name": "mul", "dimension": None, "rank": None},
+                {"name": "div", "dimension": None, "rank": None},
+                {"name": "sin", "dimension": None, "rank": None},
+                {"name": "cos", "dimension": None, "rank": None},
+                {"name": "exp", "dimension": None, "rank": None},
+                {"name": "log", "dimension": None, "rank": None},
+            ],
+        }
+
+        pset = add_primitives_to_pset_from_dict(pset, primitives)
+        return pset
+
+    def __creator_toolbox_pset_config(self):
         """Initialize toolbox and individual creator based on config file."""
-        self.__toolbox = base.Toolbox()
+        pset = self.__pset_config()
+        toolbox = base.Toolbox()
 
         # SELECTION
-        self.__toolbox.register(
-            "select", eval(self.select_fun), **eval(self.select_args)
-        )
+        toolbox.register("select", eval(self.select_fun), **eval(self.select_args))
 
         # MUTATION
-        self.__toolbox.register(
+        toolbox.register(
             "expr_mut", eval(self.expr_mut_fun), **eval(self.expr_mut_args)
         )
 
-        self.__toolbox.register("mutate", eval(self.mut_fun), **eval(self.mut_args))
+        toolbox.register("mutate", eval(self.mut_fun), **eval(self.mut_args))
 
         # CROSSOVER
-        self.__toolbox.register(
-            "mate", eval(self.crossover_fun), **eval(self.crossover_args)
-        )
-        self.__toolbox.decorate(
+        toolbox.register("mate", eval(self.crossover_fun), **eval(self.crossover_args))
+        toolbox.decorate(
             "mate", gp.staticLimit(key=operator.attrgetter("height"), max_value=17)
         )
-        self.__toolbox.decorate(
+        toolbox.decorate(
             "mutate", gp.staticLimit(key=operator.attrgetter("height"), max_value=17)
         )
 
         # INDIVIDUAL GENERATOR/CREATOR
-        self.__toolbox.register(
+        toolbox.register(
             "expr",
             gp.genHalfAndHalf,
-            pset=self.pset,
+            pset=pset,
             min_=self.min_height,
             max_=self.max_height,
         )
-        self.__toolbox.register(
+        toolbox.register(
             "expr_pop",
             gp.genHalfAndHalf,
-            pset=self.pset,
+            pset=pset,
             min_=self.min_height,
             max_=self.max_height,
             is_pop=True,
@@ -216,21 +235,20 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         creator.create("FitnessMin", base.Fitness, weights=(-1.0,))
         creator.create("Individual", gp.PrimitiveTree, fitness=creator.FitnessMin)
         createIndividual = creator.Individual
-        self.__toolbox.register(
-            "individual", tools.initIterate, createIndividual, self.__toolbox.expr
+        toolbox.register(
+            "individual", tools.initIterate, createIndividual, toolbox.expr
         )
 
-        self.__toolbox.register(
-            "population", tools.initRepeat, list, self.__toolbox.individual
-        )
-        self.__toolbox.register("compile", gp.compile, pset=self.pset)
+        toolbox.register("population", tools.initRepeat, list, toolbox.individual)
+        toolbox.register("compile", gp.compile, pset=pset)
 
         self.__createIndividual = createIndividual
 
         if self.seed is not None:
             self.seed = [
-                self.__createIndividual.from_string(i, self.pset) for i in self.seed
+                self.__createIndividual.from_string(i, pset) for i in self.seed
             ]
+        return toolbox, pset
 
     def __store_fit_error_common_args(self, data: Dict):
         """Store names and values of the arguments that are in common between
@@ -273,12 +291,12 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         self.__logbook.chapters["fitness"].header = "min", "avg", "max", "std"
         self.__logbook.chapters["size"].header = "min", "avg", "max", "std"
 
-    def __compute_valid_stats(self, pop):
+    def __compute_valid_stats(self, pop, toolbox):
         best = tools.selBest(pop, k=1)
         # FIXME: ugly way of handling lists/tuples; assume eval_val_MSE returns a
         # single-valued tuple as eval_val_fit
-        valid_fit = self.__toolbox.map(self.__toolbox.evaluate_val_fit, best)[0][0]
-        valid_err = self.__toolbox.map(self.__toolbox.evaluate_val_MSE, best)[0]
+        valid_fit = toolbox.map(toolbox.evaluate_val_fit, best)[0][0]
+        valid_err = toolbox.map(toolbox.evaluate_val_MSE, best)[0]
 
         return valid_fit, valid_err
 
@@ -356,99 +374,92 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
     def __get_remote(self, f):
         return (ray.remote(f)).remote
 
-    def __register_fitness_func(self):
+    def __register_fitness_func(self, toolbox):
         store = self.__data_store
         args_train = store["common"] | store["train"]
-        self.__toolbox.register(
+        toolbox.register(
             "evaluate_train", self.__get_remote(self.fitness), **args_train
         )
 
-    def __register_val_funcs(self):
+    def __register_val_funcs(self, toolbox):
         """Register the functions needed for validation, i.e. the error metric and the
         fitness function. Must be called after storing the datasets in the common
         obj space.
         """
         store = self.__data_store
         args_val = store["common"] | store["val"]
-        self.__toolbox.register(
+        toolbox.register(
             "evaluate_val_fit", self.__get_remote(self.fitness), **args_val
         )
-        self.__toolbox.register(
+        toolbox.register(
             "evaluate_val_MSE", self.__get_remote(self.error_metric), **args_val
         )
 
-    def __register_score_func(self):
+    def __register_score_func(self, toolbox):
         store = self.__data_store
         args_score_func = store["common"] | store["test"]
-        self.__toolbox.register(
+        toolbox.register(
             "evaluate_test_score",
             self.__get_remote(self.error_metric),
             **args_score_func,
         )
 
-    def __register_predict_func(self):
+    def __register_predict_func(self, toolbox):
         store = self.__data_store
         args_predict_func = store["common"] | store["test"]
-        self.__toolbox.register(
+        toolbox.register(
             "evaluate_test_sols",
             self.__get_remote(self.predict_func),
             **args_predict_func,
         )
 
-    def __register_map(self):
-        def mapper(f, individuals, toolbox_ref):
-            fitnesses = [] * len(individuals)
-            for i in range(0, len(individuals), self.batch_size):
-                individuals_batch = individuals[i : i + self.batch_size]
-                fitnesses.append(f(individuals_batch, toolbox_ref))
-            fitnesses = list(chain(*ray.get(fitnesses)))
-            return fitnesses
-
-        toolbox_ref = ray.put(self.__toolbox)
-        self.__toolbox.register("map", mapper, toolbox_ref=toolbox_ref)
+    def __register_map(self, toolbox):
+        toolbox_ref = ray.put(toolbox)
+        toolbox.register(
+            "map", mapper, toolbox_ref=toolbox_ref, batch_size=self.batch_size
+        )
 
     # @_fit_context(prefer_skip_nested_validation=True)
     def fit(self, X, y=None, X_val=None, y_val=None):
         """Fits the training data using GP-based symbolic regression."""
         X, y = self._validate_data(X, y, accept_sparse=False)
 
-        if not hasattr(self, "_is_fitted"):
-            self.__data_store = dict()
+        # config individual creator and toolbox
+        toolbox, pset = self.__creator_toolbox_pset_config()
 
-            if self.common_data is not None:
-                # FIXME: does everything work when the functions do not have common args?
-                self.__store_fit_error_common_args(self.common_data)
+        self.__data_store = dict()
 
-            # config individual creator and toolbox
-            self.__creator_toolbox_config()
+        if self.common_data is not None:
+            # FIXME: does everything work when the functions do not have common args?
+            self.__store_fit_error_common_args(self.common_data)
 
-            # Initialize variables for statistics
-            self.__stats_fit = tools.Statistics(lambda ind: ind.fitness.values)
-            self.__stats_size = tools.Statistics(len)
-            self.__mstats = tools.MultiStatistics(
-                fitness=self.__stats_fit, size=self.__stats_size
-            )
-            self.__mstats.register("avg", lambda ind: np.around(np.mean(ind), 4))
-            self.__mstats.register("std", lambda ind: np.around(np.std(ind), 4))
-            self.__mstats.register("min", lambda ind: np.around(np.min(ind), 4))
-            self.__mstats.register("max", lambda ind: np.around(np.max(ind), 4))
+        # Initialize variables for statistics
+        self.__stats_fit = tools.Statistics(lambda ind: ind.fitness.values)
+        self.__stats_size = tools.Statistics(len)
+        self.__mstats = tools.MultiStatistics(
+            fitness=self.__stats_fit, size=self.__stats_size
+        )
+        self.__mstats.register("avg", lambda ind: np.around(np.mean(ind), 4))
+        self.__mstats.register("std", lambda ind: np.around(np.std(ind), 4))
+        self.__mstats.register("min", lambda ind: np.around(np.min(ind), 4))
+        self.__mstats.register("max", lambda ind: np.around(np.max(ind), 4))
 
-            self.__init_logbook()
+        self.__init_logbook()
 
-            self.__train_fit_history = []
+        self.__train_fit_history = []
 
-            # Create history object to build the genealogy tree
-            self.__history = tools.History()
+        # Create history object to build the genealogy tree
+        self.__history = tools.History()
 
-            if self.plot_best_genealogy:
-                # Decorators for history
-                self.__toolbox.decorate("mate", self.__history.decorator)
-                self.__toolbox.decorate("mutate", self.__history.decorator)
+        if self.plot_best_genealogy:
+            # Decorators for history
+            toolbox.decorate("mate", self.__history.decorator)
+            toolbox.decorate("mutate", self.__history.decorator)
 
-            self.__register_map()
+        self.__register_map(toolbox)
 
-            self.__plot_initialized = False
-            self.__fig_id = 0
+        self.__plot_initialized = False
+        self.__fig_id = 0
 
         train_data = {"X": X, "y": y}
         if self.validate and X_val is not None:
@@ -457,25 +468,25 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         else:
             datasets = {"train": train_data}
         self.__store_datasets(datasets)
-        self.__register_fitness_func()
+        self.__register_fitness_func(toolbox)
         if self.validate and self.error_metric is not None:
-            self.__register_val_funcs()
-        self.__run()
+            self.__register_val_funcs(toolbox)
+        self.__run(toolbox)
         self._is_fitted = True
         return self
 
     def predict(self, X):
         check_is_fitted(self)
+        toolbox, pset = self.__creator_toolbox_pset_config()
         X = self._validate_data(X, accept_sparse=False, reset=False)
         test_data = {"X": X}
         datasets = {"test": test_data}
         self.__store_datasets(datasets)
         if not hasattr(self, "_predict_func_registered"):
-            self.__register_predict_func()
+            self.__register_predict_func(toolbox)
             self._predict_func_registered = True
-        u_best = self.__toolbox.map(self.__toolbox.evaluate_test_sols, (self.__best,))[
-            0
-        ]
+        u_best = toolbox.map(toolbox.evaluate_test_sols, (self.__best,))[0]
+        # u_best = toolbox.map(toolbox.evaluate_test_sols, (self.__best,))
         return u_best
 
     def score(self, X, y):
@@ -483,18 +494,18 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         on a given dataset.
         """
         check_is_fitted(self)
+        toolbox, pset = self.__creator_toolbox_pset_config()
         X, y = self._validate_data(X, y, accept_sparse=False, reset=False)
         test_data = {"X": X, "y": y}
         datasets = {"test": test_data}
         self.__store_datasets(datasets)
-        self.__register_score_func()
-        score = self.__toolbox.map(self.__toolbox.evaluate_test_score, (self.__best,))[
-            0
-        ]
+        self.__register_score_func(toolbox)
+        score = toolbox.map(toolbox.evaluate_test_score, (self.__best,))[0]
+        # score = toolbox.map(toolbox.evaluate_test_score, (self.__best,))
         return score
 
-    def __immigration(self, pop, num_immigrants: int):
-        immigrants = self.__toolbox.population(n=num_immigrants)
+    def __immigration(self, pop, num_immigrants: int, toolbox):
+        immigrants = toolbox.population(n=num_immigrants)
         for i in range(num_immigrants):
             idx_individual_to_replace = random.randint(0, self.NINDIVIDUALS - 1)
             pop[idx_individual_to_replace] = immigrants[i]
@@ -515,64 +526,64 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             start = end  # Update the start index for the next sublist
         return result
 
-    def __local_search(
-        self, n_iter: int = 1, n_mutations: int = 500, n_inds_to_refine: int = 10
-    ):
+    # def __local_search(
+    #     self, n_iter: int = 1, n_mutations: int = 500, n_inds_to_refine: int = 10
+    # ):
 
-        for i in range(self.num_islands):
-            # select N best individuals for refinement
-            sel_individuals = tools.selBest(self.__pop[i], k=n_inds_to_refine)
+    #     for i in range(self.num_islands):
+    #         # select N best individuals for refinement
+    #         sel_individuals = tools.selBest(self.__pop[i], k=n_inds_to_refine)
 
-            # store indices of best individuals in the population
-            idx_ind = [
-                self.__pop[i].index(sel_individuals[j]) for j in range(n_inds_to_refine)
-            ]
+    #         # store indices of best individuals in the population
+    #         idx_ind = [
+    #             self.__pop[i].index(sel_individuals[j]) for j in range(n_inds_to_refine)
+    #         ]
 
-            # initialize best-so-far individuals and fitnesses with the
-            # current individuals
-            best_so_far_fits = [
-                sel_individuals[j].fitness.values[0] for j in range(n_inds_to_refine)
-            ]
-            best_so_far_inds = self.__toolbox.clone(sel_individuals)
+    #         # initialize best-so-far individuals and fitnesses with the
+    #         # current individuals
+    #         best_so_far_fits = [
+    #             sel_individuals[j].fitness.values[0] for j in range(n_inds_to_refine)
+    #         ]
+    #         best_so_far_inds = self.__toolbox.clone(sel_individuals)
 
-            for _ in range(n_iter):
-                mutants = self.__toolbox.clone(best_so_far_inds)
-                # generate mutations for each of the best individuals
-                mut_ind = [
-                    [
-                        gp.mixedMutate(
-                            mutants[j],
-                            self.__toolbox.expr_mut,
-                            self.pset,
-                            [0.4, 0.3, 0.3],
-                        )[0]
-                        for _ in range(n_mutations)
-                    ]
-                    for j in range(n_inds_to_refine)
-                ]
-                for j in range(n_inds_to_refine):
-                    # evaluate fitnesses of mutated individuals
-                    fitness_mutated_inds = self.__toolbox.map(
-                        self.__toolbox.evaluate_train, mut_ind[j]
-                    )
+    #         for _ in range(n_iter):
+    #             mutants = self.__toolbox.clone(best_so_far_inds)
+    #             # generate mutations for each of the best individuals
+    #             mut_ind = [
+    #                 [
+    #                     gp.mixedMutate(
+    #                         mutants[j],
+    #                         self.__toolbox.expr_mut,
+    #                         self.__pset,
+    #                         [0.4, 0.3, 0.3],
+    #                     )[0]
+    #                     for _ in range(n_mutations)
+    #                 ]
+    #                 for j in range(n_inds_to_refine)
+    #             ]
+    #             for j in range(n_inds_to_refine):
+    #                 # evaluate fitnesses of mutated individuals
+    #                 fitness_mutated_inds = self.__toolbox.map(
+    #                     self.__toolbox.evaluate_train, mut_ind[j]
+    #                 )
 
-                    # assign fitnesses to mutated individuals
-                    for ind, fit in zip(mut_ind[j], fitness_mutated_inds):
-                        ind.fitness.values = fit
+    #                 # assign fitnesses to mutated individuals
+    #                 for ind, fit in zip(mut_ind[j], fitness_mutated_inds):
+    #                     ind.fitness.values = fit
 
-                    # select best mutation
-                    best_mutation = tools.selBest(mut_ind[j], k=1)[0]
+    #                 # select best mutation
+    #                 best_mutation = tools.selBest(mut_ind[j], k=1)[0]
 
-                    if best_mutation.fitness.values[0] < best_so_far_fits[j]:
-                        print("Found better individual in tabu search")
-                        best_so_far_inds[j] = best_mutation
-                        best_so_far_fits[j] = best_mutation.fitness.values[0]
+    #                 if best_mutation.fitness.values[0] < best_so_far_fits[j]:
+    #                     print("Found better individual in tabu search")
+    #                     best_so_far_inds[j] = best_mutation
+    #                     best_so_far_fits[j] = best_mutation.fitness.values[0]
 
-            # replace individuals with refined ones (if improved)
-            for j in range(n_inds_to_refine):
-                self.__pop[i][idx_ind[j]] = best_so_far_inds[j]
+    #         # replace individuals with refined ones (if improved)
+    #         for j in range(n_inds_to_refine):
+    #             self.__pop[i][idx_ind[j]] = best_so_far_inds[j]
 
-    def __evolve_islands(self, cgen: int):
+    def __evolve_islands(self, cgen: int, toolbox):
         num_evals = 0
 
         invalid_inds = [None] * self.num_islands
@@ -587,15 +598,13 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
                     )
 
             # Select the parents for the offspring
-            offsprings[i] = list(
-                map(self.__toolbox.clone, self.__toolbox.select(self.__pop[i]))
-            )
+            offsprings[i] = list(map(toolbox.clone, toolbox.select(self.__pop[i])))
 
             # Apply crossover and mutation to the offspring with elitism
             elite_inds[i] = tools.selBest(offsprings[i], self.n_elitist)
             offsprings[i] = elite_inds[i] + algorithms.varOr(
                 offsprings[i],
-                self.__toolbox,
+                toolbox,
                 self.NINDIVIDUALS - self.n_elitist,
                 self.crossover_prob,
                 self.MUTPB,
@@ -609,8 +618,8 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             if self.preprocess_func is not None:
                 self.preprocess_func(invalid_inds[i])
 
-        fitnesses = self.__toolbox.map(
-            self.__toolbox.evaluate_train, self.__flatten_list(invalid_inds)
+        fitnesses = toolbox.map(
+            toolbox.evaluate_train, self.__flatten_list(invalid_inds)
         )
         fitnesses = self.__unflatten_list(fitnesses, [len(i) for i in invalid_inds])
 
@@ -643,14 +652,14 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
 
         return num_evals
 
-    def __run(self):
+    def __run(self, toolbox):
         """Runs symbolic regression."""
 
         # Generate initial population
         print("Generating initial population(s)...", flush=True)
         self.__pop = [None] * self.num_islands
         for i in range(self.num_islands):
-            self.__pop[i] = self.__toolbox.population(n=self.NINDIVIDUALS)
+            self.__pop[i] = toolbox.population(n=self.NINDIVIDUALS)
 
         print("DONE.", flush=True)
 
@@ -672,7 +681,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             self.preprocess_func(self.__pop)
 
         for i in range(self.num_islands):
-            fitnesses = self.__toolbox.map(self.__toolbox.evaluate_train, self.__pop[i])
+            fitnesses = toolbox.map(toolbox.evaluate_train, self.__pop[i])
 
             if self.callback_func is not None:
                 self.callback_func(self.__pop[i], fitnesses)
@@ -688,7 +697,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         for gen in range(self.NGEN):
             self.__cgen = gen + 1
 
-            num_evals = self.__evolve_islands(self.__cgen)
+            num_evals = self.__evolve_islands(self.__cgen, toolbox)
 
             # select the best individuals in the current population
             # (including all islands)
@@ -729,7 +738,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
                     or self.__cgen == self.NGEN
                 )
             ):
-                self.__toolbox.plot_best_func(best_inds[0])
+                toolbox.plot_best_func(best_inds[0])
 
             self.__best = best_inds[0]
             if self.__best.fitness.values[0] <= 1e-15:

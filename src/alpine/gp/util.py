@@ -1,6 +1,8 @@
 import yaml
 from .primitives import add_primitives_to_pset
 from importlib import import_module
+from itertools import chain
+import ray
 
 
 def add_primitives_to_pset_from_dict(pset, primitives_dict):
@@ -91,6 +93,15 @@ def detect_nested_trigonometric_functions(equation):
         i += 1
 
     return nested
+
+
+def mapper(f, individuals, toolbox_ref, batch_size):
+    fitnesses = [] * len(individuals)
+    for i in range(0, len(individuals), batch_size):
+        individuals_batch = individuals[i : i + batch_size]
+        fitnesses.append(f(individuals_batch, toolbox_ref))
+    fitnesses = list(chain(*ray.get(fitnesses)))
+    return fitnesses
 
 
 def dummy_fitness(individuals_str, toolbox, X, y):

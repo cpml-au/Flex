@@ -120,7 +120,7 @@ def main():
     common_data = {"penalty": penalty}
 
     gpsr = GPSymbolicRegressor(
-        pset=pset,
+        pset_config=pset,
         fitness=fitness.remote,
         error_metric=score.remote,
         predict_func=predict.remote,

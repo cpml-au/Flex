@@ -206,7 +206,7 @@ def test_poisson1d(set_test_dir, yamlfile):
     common_params = {"S": S, "u_0": u_0, "penalty": penalty}
 
     gpsr = gps.GPSymbolicRegressor(
-        pset=pset,
+        pset_config=pset,
         fitness=fitness.remote,
         error_metric=score.remote,
         predict_func=predict.remote,
