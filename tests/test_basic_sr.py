@@ -100,7 +100,7 @@ def test_basic_sr(set_test_dir):
         error_metric=score,
         predict_func=predict,
         common_data=common_data,
-        seed=seed,
+        seed_str=seed,
         batch_size=10,
         **regressor_params
     )

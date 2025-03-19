@@ -247,7 +247,7 @@ def eval(problem, cfgfile, seed=42):
         num_best_inds_str=1,
         save_best_individual=False,
         output_path="./",
-        seed=None,
+        seed_str=None,
         batch_size=batch_size,
         **regressor_params,
     )

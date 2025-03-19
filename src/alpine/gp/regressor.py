@@ -101,7 +101,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         validate: bool = False,
         preprocess_func: Callable | None = None,
         callback_func: Callable | None = None,
-        seed: List[str] | None = None,
+        seed_str: List[str] | None = None,
         plot_history: bool = False,
         print_log: bool = False,
         num_best_inds_str: int = 1,
@@ -165,7 +165,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
 
         self.frac_elitist = frac_elitist
 
-        self.seed = seed
+        self.seed_str = seed_str
 
     @property
     def n_elitist(self):
@@ -174,35 +174,35 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
     def get_params(self, deep=True):
         return self.__dict__
 
-    def __pset_config(self):
-        pset = gp.PrimitiveSetTyped(
-            "MAIN",
-            [
-                float,
-            ],
-            float,
-        )
-        pset.renameArguments(ARG0="x")
-        primitives = {
-            "imports": {"alpine.gp.numpy_primitives": ["numpy_primitives"]},
-            "used": [
-                {"name": "add", "dimension": None, "rank": None},
-                {"name": "sub", "dimension": None, "rank": None},
-                {"name": "mul", "dimension": None, "rank": None},
-                {"name": "div", "dimension": None, "rank": None},
-                {"name": "sin", "dimension": None, "rank": None},
-                {"name": "cos", "dimension": None, "rank": None},
-                {"name": "exp", "dimension": None, "rank": None},
-                {"name": "log", "dimension": None, "rank": None},
-            ],
-        }
+    # def __pset_config(self):
+    #     pset = gp.PrimitiveSetTyped(
+    #         "MAIN",
+    #         [
+    #             float,
+    #         ],
+    #         float,
+    #     )
+    #     pset.renameArguments(ARG0="x")
+    #     primitives = {
+    #         "imports": {"alpine.gp.numpy_primitives": ["numpy_primitives"]},
+    #         "used": [
+    #             {"name": "add", "dimension": None, "rank": None},
+    #             {"name": "sub", "dimension": None, "rank": None},
+    #             {"name": "mul", "dimension": None, "rank": None},
+    #             {"name": "div", "dimension": None, "rank": None},
+    #             {"name": "sin", "dimension": None, "rank": None},
+    #             {"name": "cos", "dimension": None, "rank": None},
+    #             {"name": "exp", "dimension": None, "rank": None},
+    #             {"name": "log", "dimension": None, "rank": None},
+    #         ],
+    #     }
 
-        pset = add_primitives_to_pset_from_dict(pset, primitives)
-        return pset
+    #     pset = add_primitives_to_pset_from_dict(pset, primitives)
+    #     return pset
 
     def __creator_toolbox_pset_config(self):
         """Initialize toolbox and individual creator based on config file."""
-        pset = self.__pset_config()
+        pset = self.pset_config
         toolbox = base.Toolbox()
 
         # SELECTION
@@ -252,8 +252,10 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         toolbox.register("population", tools.initRepeat, list, toolbox.individual)
         toolbox.register("compile", gp.compile, pset=pset)
 
-        if self.seed is not None:
-            self.seed = [createIndividual.from_string(i, pset) for i in self.seed]
+        if self.seed_str is not None:
+            self.seed_ind = [
+                createIndividual.from_string(i, pset) for i in self.seed_str
+            ]
         return toolbox, pset
 
     def __store_fit_error_common_args(self, data: Dict):
@@ -615,9 +617,9 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             self.__history.update(self.__pop[0])
 
         # Seeds the first island with individuals
-        if self.seed is not None:
+        if self.seed_ind is not None:
             print("Seeding population with individuals...", flush=True)
-            self.__pop[0][: len(self.seed)] = self.seed
+            self.__pop[0][: len(self.seed_ind)] = self.seed_ind
 
         print(" -= START OF EVOLUTION =- ", flush=True)
 
