@@ -10,7 +10,15 @@ from alpine.data import Dataset
 import os
 import ray
 import random
-from alpine.gp.util import mapper, add_primitives_to_pset_from_dict
+from alpine.gp.util import (
+    mapper,
+    add_primitives_to_pset_from_dict,
+    max_func,
+    min_func,
+    avg_func,
+    std_func,
+    fitness_value,
+)
 from sklearn.base import BaseEstimator, RegressorMixin
 from sklearn.utils.validation import check_is_fitted
 
@@ -232,8 +240,10 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             max_=self.max_height,
             is_pop=True,
         )
-        creator.create("FitnessMin", base.Fitness, weights=(-1.0,))
-        creator.create("Individual", gp.PrimitiveTree, fitness=creator.FitnessMin)
+        if not hasattr(creator, "FitnessMin"):
+            creator.create("FitnessMin", base.Fitness, weights=(-1.0,))
+        if not hasattr(creator, "Individual"):
+            creator.create("Individual", gp.PrimitiveTree, fitness=creator.FitnessMin)
         createIndividual = creator.Individual
         toolbox.register(
             "individual", tools.initIterate, createIndividual, toolbox.expr
@@ -242,12 +252,8 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         toolbox.register("population", tools.initRepeat, list, toolbox.individual)
         toolbox.register("compile", gp.compile, pset=pset)
 
-        self.__createIndividual = createIndividual
-
         if self.seed is not None:
-            self.seed = [
-                self.__createIndividual.from_string(i, pset) for i in self.seed
-            ]
+            self.seed = [createIndividual.from_string(i, pset) for i in self.seed]
         return toolbox, pset
 
     def __store_fit_error_common_args(self, data: Dict):
@@ -434,15 +440,15 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             self.__store_fit_error_common_args(self.common_data)
 
         # Initialize variables for statistics
-        self.__stats_fit = tools.Statistics(lambda ind: ind.fitness.values)
+        self.__stats_fit = tools.Statistics(fitness_value)
         self.__stats_size = tools.Statistics(len)
         self.__mstats = tools.MultiStatistics(
             fitness=self.__stats_fit, size=self.__stats_size
         )
-        self.__mstats.register("avg", lambda ind: np.around(np.mean(ind), 4))
-        self.__mstats.register("std", lambda ind: np.around(np.std(ind), 4))
-        self.__mstats.register("min", lambda ind: np.around(np.min(ind), 4))
-        self.__mstats.register("max", lambda ind: np.around(np.max(ind), 4))
+        self.__mstats.register("avg", avg_func)
+        self.__mstats.register("std", std_func)
+        self.__mstats.register("min", min_func)
+        self.__mstats.register("max", max_func)
 
         self.__init_logbook()
 
@@ -473,7 +479,6 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             self.__register_val_funcs(toolbox)
         self.__run(toolbox)
         self._is_fitted = True
-        self.__toolbox = toolbox
         return self
 
     def predict(self, X):
@@ -484,10 +489,8 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         test_data = {"X": X}
         datasets = {"test": test_data}
         self.__store_datasets(datasets)
-        if not hasattr(self, "_predict_func_registered"):
-            self.__register_predict_func(toolbox)
-            self._predict_func_registered = True
-        u_best = toolbox.map(toolbox.evaluate_test_sols, (self.__best,))[0]
+        self.__register_predict_func(toolbox)
+        u_best = toolbox.map(toolbox.evaluate_test_sols, (self.__str_best,))[0]
         return u_best
 
     def score(self, X, y):
@@ -685,6 +688,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
                 toolbox.plot_best_func(best_inds[0])
 
             self.__best = best_inds[0]
+            self.__str_best = str(self.__best)
             if self.__best.fitness.values[0] <= 1e-15:
                 print("EARLY STOPPING.")
                 break

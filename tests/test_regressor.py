@@ -54,7 +54,10 @@ def test_regressor():
     )
 
     print(gpsr.get_params())
-    check_estimator(gpsr)
+    check_estimator(
+        gpsr,
+        expected_failed_checks={"check_regressors_train": "dummy model"},
+    )
 
     # # Generate synthetic data
     # X, y = make_regression(n_samples=100, n_features=10, random_state=42)

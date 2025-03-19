@@ -3,6 +3,7 @@ from .primitives import add_primitives_to_pset
 from importlib import import_module
 from itertools import chain
 import ray
+import numpy as np
 
 
 def add_primitives_to_pset_from_dict(pset, primitives_dict):
@@ -118,5 +119,25 @@ def dummy_score(individuals_str, toolbox, X, y):
 
 
 def dummy_predict(individuals_str, toolbox, X):
-    pred = [0.0] * len(individuals_str)
+    pred = [np.zeros(len(X))] * len(individuals_str)
     return pred
+
+
+def fitness_value(ind):
+    return ind.fitness.values
+
+
+def avg_func(values):
+    return np.around(np.mean(values), 4)
+
+
+def std_func(values):
+    return np.around(np.std(values), 4)
+
+
+def min_func(values):
+    return np.around(np.min(values), 4)
+
+
+def max_func(values):
+    return np.around(np.max(values), 4)
