@@ -2,12 +2,13 @@ from sklearn.utils.estimator_checks import check_estimator
 from alpine.gp.regressor import GPSymbolicRegressor
 from alpine.gp import util
 from deap import gp
-from sklearn.datasets import make_regression
-from sklearn.model_selection import train_test_split, GridSearchCV
+
+# from sklearn.datasets import make_regression
+# from sklearn.model_selection import train_test_split, GridSearchCV
 from alpine.gp.util import dummy_fitness, dummy_score, dummy_predict
 
 
-def test_regressor():
+def test_check_regressor():
     pset = gp.PrimitiveSetTyped(
         "MAIN",
         [
@@ -83,4 +84,4 @@ def test_regressor():
 
 
 if __name__ == "__main__":
-    test_regressor()
+    test_check_regressor()

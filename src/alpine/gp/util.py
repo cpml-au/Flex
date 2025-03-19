@@ -123,6 +123,10 @@ def dummy_predict(individuals_str, toolbox, X):
     return pred
 
 
+def compile_individuals(toolbox, individuals_str_batch):
+    return [toolbox.compile(expr=ind) for ind in individuals_str_batch]
+
+
 def fitness_value(ind):
     return ind.fitness.values
 
