@@ -11,7 +11,7 @@ import os
 import ray
 import random
 from alpine.gp.util import mapper, add_primitives_to_pset_from_dict
-from sklearn.base import BaseEstimator, RegressorMixin, _fit_context
+from sklearn.base import BaseEstimator, RegressorMixin
 from sklearn.utils.validation import check_is_fitted
 
 
@@ -473,11 +473,13 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             self.__register_val_funcs(toolbox)
         self.__run(toolbox)
         self._is_fitted = True
+        self.__toolbox = toolbox
         return self
 
     def predict(self, X):
         check_is_fitted(self)
         toolbox, pset = self.__creator_toolbox_pset_config()
+        self.__register_map(toolbox)
         X = self._validate_data(X, accept_sparse=False, reset=False)
         test_data = {"X": X}
         datasets = {"test": test_data}
@@ -486,7 +488,6 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             self.__register_predict_func(toolbox)
             self._predict_func_registered = True
         u_best = toolbox.map(toolbox.evaluate_test_sols, (self.__best,))[0]
-        # u_best = toolbox.map(toolbox.evaluate_test_sols, (self.__best,))
         return u_best
 
     def score(self, X, y):
@@ -495,13 +496,13 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         """
         check_is_fitted(self)
         toolbox, pset = self.__creator_toolbox_pset_config()
+        self.__register_map(toolbox)
         X, y = self._validate_data(X, y, accept_sparse=False, reset=False)
         test_data = {"X": X, "y": y}
         datasets = {"test": test_data}
         self.__store_datasets(datasets)
         self.__register_score_func(toolbox)
         score = toolbox.map(toolbox.evaluate_test_score, (self.__best,))[0]
-        # score = toolbox.map(toolbox.evaluate_test_score, (self.__best,))
         return score
 
     def __immigration(self, pop, num_immigrants: int, toolbox):
@@ -525,63 +526,6 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             result.append(flat_lst[start:end])
             start = end  # Update the start index for the next sublist
         return result
-
-    # def __local_search(
-    #     self, n_iter: int = 1, n_mutations: int = 500, n_inds_to_refine: int = 10
-    # ):
-
-    #     for i in range(self.num_islands):
-    #         # select N best individuals for refinement
-    #         sel_individuals = tools.selBest(self.__pop[i], k=n_inds_to_refine)
-
-    #         # store indices of best individuals in the population
-    #         idx_ind = [
-    #             self.__pop[i].index(sel_individuals[j]) for j in range(n_inds_to_refine)
-    #         ]
-
-    #         # initialize best-so-far individuals and fitnesses with the
-    #         # current individuals
-    #         best_so_far_fits = [
-    #             sel_individuals[j].fitness.values[0] for j in range(n_inds_to_refine)
-    #         ]
-    #         best_so_far_inds = self.__toolbox.clone(sel_individuals)
-
-    #         for _ in range(n_iter):
-    #             mutants = self.__toolbox.clone(best_so_far_inds)
-    #             # generate mutations for each of the best individuals
-    #             mut_ind = [
-    #                 [
-    #                     gp.mixedMutate(
-    #                         mutants[j],
-    #                         self.__toolbox.expr_mut,
-    #                         self.__pset,
-    #                         [0.4, 0.3, 0.3],
-    #                     )[0]
-    #                     for _ in range(n_mutations)
-    #                 ]
-    #                 for j in range(n_inds_to_refine)
-    #             ]
-    #             for j in range(n_inds_to_refine):
-    #                 # evaluate fitnesses of mutated individuals
-    #                 fitness_mutated_inds = self.__toolbox.map(
-    #                     self.__toolbox.evaluate_train, mut_ind[j]
-    #                 )
-
-    #                 # assign fitnesses to mutated individuals
-    #                 for ind, fit in zip(mut_ind[j], fitness_mutated_inds):
-    #                     ind.fitness.values = fit
-
-    #                 # select best mutation
-    #                 best_mutation = tools.selBest(mut_ind[j], k=1)[0]
-
-    #                 if best_mutation.fitness.values[0] < best_so_far_fits[j]:
-    #                     print("Found better individual in tabu search")
-    #                     best_so_far_inds[j] = best_mutation
-    #                     best_so_far_fits[j] = best_mutation.fitness.values[0]
-
-    #         # replace individuals with refined ones (if improved)
-    #         for j in range(n_inds_to_refine):
-    #             self.__pop[i][idx_ind[j]] = best_so_far_inds[j]
 
     def __evolve_islands(self, cgen: int, toolbox):
         num_evals = 0
@@ -731,7 +675,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
 
             if (
                 self.plot_best
-                and (self.__toolbox.plot_best_func is not None)
+                and (toolbox.plot_best_func is not None)
                 and (
                     self.__cgen % self.plot_freq == 0
                     or self.__cgen == 1
