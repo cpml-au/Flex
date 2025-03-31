@@ -13,7 +13,7 @@ config()
 
 
 x = jnp.array([x / 10.0 for x in range(-10, 10)]).reshape(-1, 1)
-y = x**4 + x**3 + x**2 + x
+y = (x**4 + x**3 + x**2 + x).ravel()
 
 
 def eval_MSE_sol(individual, X, y):
@@ -23,7 +23,9 @@ def eval_MSE_sol(individual, X, y):
     config()
     # Evaluate the mean squared error between the expression
     # and the real function : x**4 + x**3 + x**2 + x
-    y_pred = individual(X)
+    # WARNING: since X is a column vector, you get a 2D array as an output,
+    # while y is a 1D array
+    y_pred = individual(X).ravel()
     MSE = None
 
     if y is not None:

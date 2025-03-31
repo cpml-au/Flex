@@ -16,6 +16,7 @@ from alpine.gp import util
 
 # choose precision and whether to use GPU or CPU
 # needed for context of the plots at the end of the evolution
+os.environ["JAX_PLATFORMS"] = "cpu"
 config()
 
 
@@ -40,6 +41,7 @@ def eval_MSE_sol(
 
     # need to call config again before using JAX in energy evaluations to make sure that
     # the current worker has initialized JAX
+    os.environ["JAX_PLATFORMS"] = "cpu"
     config()
 
     # objective: squared norm of the residual of the equation + penalty on Dirichlet
@@ -56,44 +58,27 @@ def eval_MSE_sol(
 
     MSE = 0.0
 
-    us = []
+    # set additional arguments of the objective function
+    # (apart from the vector of unknowns)
+    args = {"y": X}
+    prb.set_obj_args(args)
 
-    for i, curr_force in enumerate(X):
-        # set additional arguments of the objective function
-        # (apart from the vector of unknowns)
-        args = {"y": curr_force}
-        prb.set_obj_args(args)
+    print(X, y)
+    # minimize the objective
+    u = prb.solve(x0=u_0.coeffs.flatten(), ftol_abs=1e-12, ftol_rel=1e-12, maxeval=1000)
 
-        # minimize the objective
-        u = prb.solve(
-            x0=u_0.coeffs.flatten(), ftol_abs=1e-12, ftol_rel=1e-12, maxeval=1000
-        )
+    if prb.last_opt_result == 1 or prb.last_opt_result == 3 or prb.last_opt_result == 4:
 
-        if y is not None:
-            if (
-                prb.last_opt_result == 1
-                or prb.last_opt_result == 3
-                or prb.last_opt_result == 4
-            ):
+        MSE = np.mean(np.linalg.norm(u - y) ** 2)
+    else:
+        MSE = math.nan
 
-                current_err = np.linalg.norm(u - y[i, :]) ** 2
-            else:
-                current_err = math.nan
+    if math.isnan(MSE):
+        MSE = 1e5
 
-            if math.isnan(current_err):
-                MSE = 1e5
-                break
-
-            MSE += current_err
-
-        us.append(u)
-
-    MSE *= 1 / num_nodes
-
-    return MSE, us
+    return MSE, u
 
 
-@ray.remote
 def predict(
     individuals_str: list[str],
     toolbox,
@@ -113,7 +98,6 @@ def predict(
     return u
 
 
-@ray.remote
 def score(
     individuals_str: list[str],
     toolbox,
@@ -134,7 +118,6 @@ def score(
     return MSE
 
 
-@ray.remote
 def fitness(
     individuals_str: list[str],
     toolbox,
@@ -162,7 +145,7 @@ cases = ["poisson1d_1.yaml", "poisson1d_2.yaml"]
 
 
 @pytest.mark.parametrize("yamlfile", cases)
-def test_poisson1d(set_test_dir, yamlfile):
+def test_poisson1d(yamlfile):
     filename = os.path.join(os.path.dirname(__file__), yamlfile)
 
     regressor_params, config_file_data = util.load_config_data(filename)
@@ -182,8 +165,8 @@ def test_poisson1d(set_test_dir, yamlfile):
     f = C.laplacian(u)
     f.coeffs *= -1.0
 
-    X_train = np.array([f.coeffs.flatten()], dtype=dctkit.float_dtype)
-    y_train = np.array([u.coeffs.flatten()], dtype=dctkit.float_dtype)
+    X_train = np.array(f.coeffs, dtype=dctkit.float_dtype)
+    y_train = np.array(u.coeffs.flatten(), dtype=dctkit.float_dtype)
 
     # initial guess for the unknown of the Poisson problem (cochain of nodals values)
     u_0_vec = np.zeros(num_nodes, dtype=dctkit.float_dtype)
@@ -207,9 +190,9 @@ def test_poisson1d(set_test_dir, yamlfile):
 
     gpsr = gps.GPSymbolicRegressor(
         pset_config=pset,
-        fitness=fitness.remote,
-        error_metric=score.remote,
-        predict_func=predict.remote,
+        fitness=fitness,
+        error_metric=score,
+        predict_func=predict,
         print_log=True,
         common_data=common_params,
         seed_str=seed_str,
@@ -233,3 +216,7 @@ def test_poisson1d(set_test_dir, yamlfile):
     ray.shutdown()
     assert np.allclose(u.coeffs.flatten(), np.ravel(u_best))
     assert fit_score <= 1e-12
+
+
+if __name__ == "__main__":
+    test_poisson1d("poisson1d_1.yaml")

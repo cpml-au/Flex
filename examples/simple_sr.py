@@ -13,8 +13,8 @@ def compile_individuals(toolbox, individuals_str_batch):
 
 
 # Ground truth
-x = np.array([x / 10.0 for x in range(-10, 10)])
-y = x**4 + x**3 + x**2 + x
+x = np.array([x / 10.0 for x in range(-10, 10)]).reshape(-1, 1)
+y = (x**4 + x**3 + x**2 + x).ravel()
 
 
 def check_trig_fn(ind):
@@ -42,7 +42,7 @@ def get_features_batch(
 def eval_MSE_sol(individual, X, y):
     warnings.filterwarnings("ignore")
 
-    y_pred = individual(X)
+    y_pred = individual(X).ravel()
     MSE = np.mean(np.square(y_pred - y))
     if np.isnan(MSE):
         MSE = 1e5

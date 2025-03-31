@@ -12,7 +12,6 @@ import ray
 import random
 from alpine.gp.util import (
     mapper,
-    add_primitives_to_pset_from_dict,
     max_func,
     min_func,
     avg_func,
@@ -20,7 +19,7 @@ from alpine.gp.util import (
     fitness_value,
 )
 from sklearn.base import BaseEstimator, RegressorMixin
-from sklearn.utils.validation import check_is_fitted
+from sklearn.utils.validation import check_is_fitted, validate_data
 
 
 # reducing the number of threads launched by fitness evaluations
@@ -173,32 +172,6 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
 
     def get_params(self, deep=True):
         return self.__dict__
-
-    # def __pset_config(self):
-    #     pset = gp.PrimitiveSetTyped(
-    #         "MAIN",
-    #         [
-    #             float,
-    #         ],
-    #         float,
-    #     )
-    #     pset.renameArguments(ARG0="x")
-    #     primitives = {
-    #         "imports": {"alpine.gp.numpy_primitives": ["numpy_primitives"]},
-    #         "used": [
-    #             {"name": "add", "dimension": None, "rank": None},
-    #             {"name": "sub", "dimension": None, "rank": None},
-    #             {"name": "mul", "dimension": None, "rank": None},
-    #             {"name": "div", "dimension": None, "rank": None},
-    #             {"name": "sin", "dimension": None, "rank": None},
-    #             {"name": "cos", "dimension": None, "rank": None},
-    #             {"name": "exp", "dimension": None, "rank": None},
-    #             {"name": "log", "dimension": None, "rank": None},
-    #         ],
-    #     }
-
-    #     pset = add_primitives_to_pset_from_dict(pset, primitives)
-    #     return pset
 
     def __creator_toolbox_pset_config(self):
         """Initialize toolbox and individual creator based on config file."""
@@ -430,7 +403,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
     # @_fit_context(prefer_skip_nested_validation=True)
     def fit(self, X, y=None, X_val=None, y_val=None):
         """Fits the training data using GP-based symbolic regression."""
-        X, y = self._validate_data(X, y, accept_sparse=False)
+        X, y = validate_data(self, X, y, accept_sparse=False)
 
         # config individual creator and toolbox
         toolbox, pset = self.__creator_toolbox_pset_config()
@@ -617,7 +590,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             self.__history.update(self.__pop[0])
 
         # Seeds the first island with individuals
-        if self.seed_ind is not None:
+        if self.seed_str is not None:
             print("Seeding population with individuals...", flush=True)
             self.__pop[0][: len(self.seed_ind)] = self.seed_ind
 
