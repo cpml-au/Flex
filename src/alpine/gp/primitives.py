@@ -15,9 +15,10 @@ class PrimitiveParams:
         self.out_type = out_type
 
 
-def generate_primitive_variants(primitive: Dict[str, Dict[str, Callable] | List[str]
-                                                | str | Dict],
-                                imports: Dict = None) -> Dict:
+def generate_primitive_variants(
+    primitive: Dict[str, Dict[str, Callable] | List[str] | str | Dict],
+    imports: Dict = None,
+) -> Dict:
     """Generate primitive variants given a typed primitive.
 
     Args:
@@ -39,9 +40,9 @@ def generate_primitive_variants(primitive: Dict[str, Dict[str, Callable] | List[
         a dict in which each key is the name of the primitive variant and each value
             is a PrimitiveParams object.
     """
-    base_primitive = primitive['fun_info']
-    in_attribute = primitive['att_input']
-    map_rule = primitive['map_rule']
+    base_primitive = primitive["fun_info"]
+    in_attribute = primitive["att_input"]
+    map_rule = primitive["map_rule"]
     primitive_dictionary = dict()
 
     # Dynamically import modules and functions needed to eval input/output types
@@ -54,39 +55,39 @@ def generate_primitive_variants(primitive: Dict[str, Dict[str, Callable] | List[
     def eval_with_globals(expression):
         return eval(expression, custom_globals)
 
-    for in_category in in_attribute['category']:
-        for in_dim in in_attribute['dimension']:
-            for in_rank in in_attribute['rank']:
+    for in_category in in_attribute["category"]:
+        for in_dim in in_attribute["dimension"]:
+            for in_rank in in_attribute["rank"]:
                 # compute the primitive name taking into account
                 # the right category, dim and rank
                 in_rank = in_rank.replace("SC", "")
-                primitive_name = base_primitive['name'] + \
-                    in_category + in_dim + in_rank
+                primitive_name = base_primitive["name"] + in_category + in_dim + in_rank
                 in_type_name = []
                 # compute the input type list
-                for i, input in enumerate(primitive['input']):
+                for i, input in enumerate(primitive["input"]):
                     # float type must be handled separately
                     if input == "float":
                         in_type_name.append(input)
                     elif len(in_rank) == 2:
                         # in this case the correct rank must be taken
-                        in_type_name.append(input + in_category +
-                                            in_dim + in_rank[i])
+                        in_type_name.append(input + in_category + in_dim + in_rank[i])
                     else:
                         in_type_name.append(input + in_category + in_dim + in_rank)
                 in_type = list(map(eval_with_globals, in_type_name))
-                out_category = map_rule['category'](in_category)
-                out_dim = str(map_rule['dimension'](int(in_dim)))
-                out_rank = map_rule['rank'](in_rank)
-                out_type_name = primitive['output'] + out_category + out_dim + out_rank
+                out_category = map_rule["category"](in_category)
+                out_dim = str(map_rule["dimension"](int(in_dim)))
+                out_rank = map_rule["rank"](in_rank)
+                out_type_name = primitive["output"] + out_category + out_dim + out_rank
                 out_type = eval_with_globals(out_type_name)
                 primitive_dictionary[primitive_name] = PrimitiveParams(
-                    base_primitive['fun'], in_type, out_type)
+                    base_primitive["fun"], in_type, out_type
+                )
     return primitive_dictionary
 
 
-def add_primitives_to_pset(pset: PrimitiveSetTyped, primitives_to_add: list,
-                           primitives_collection: dict):
+def add_primitives_to_pset(
+    pset: PrimitiveSetTyped, primitives_to_add: list, primitives_collection: dict
+):
     """Add a given list of primitives to a given PrimitiveSet.
 
     Args:
@@ -100,36 +101,47 @@ def add_primitives_to_pset(pset: PrimitiveSetTyped, primitives_to_add: list,
     """
     for primitive in primitives_to_add:
         # pre-process scalar primitives
-        if primitive['dimension'] is None:
-            primitive['dimension'] = []
-        if primitive['rank'] is None:
-            primitive['rank'] = []
+        if primitive["dimension"] is None:
+            primitive["dimension"] = []
+        if primitive["rank"] is None:
+            primitive["rank"] = []
         # save dimensions and ranks not admitted for the problem
-        non_feasible_dimensions = list(set(('0', '1', '2')) -
-                                       set(primitive['dimension']))
-        non_feasible_ranks = list(
-            set(("SC", "V", "T")) - set(primitive["rank"]))
+        non_feasible_dimensions = list(
+            set(("0", "1", "2")) - set(primitive["dimension"])
+        )
+        non_feasible_ranks = list(set(("SC", "V", "T")) - set(primitive["rank"]))
         # iterate over all the primitives, pre-computed and stored in the dictionary
         # primitives
         for typed_primitive in primitives_collection.keys():
-            if primitive['name'] in typed_primitive:
+            if primitive["name"] in typed_primitive:
                 # remove the case in which the name of the primitive is a subname
                 # of type_primitive (e.g. if primitive['name'] = sin and typed_primitive
                 # = arcsin, we don't want to add the primitive)
-                exact_name_check = len(
-                    typed_primitive.replace(primitive['name'], "")) <= 2
+                exact_name_check = (
+                    len(typed_primitive.replace(primitive["name"], "")) <= 2
+                )
                 # check if the dimension/rank of a typed primitive
                 # is admissible, i.e. if it does not coincide with a non-admissible
                 # dimension/rank
                 # FIXME: change this!
-                check_wrong_dim_primal = sum([typed_primitive.count("P" + obj)
-                                              for obj in non_feasible_dimensions])
-                check_wrong_dim_dual = sum([typed_primitive.count("D" + obj)
-                                            for obj in non_feasible_dimensions])
-                check_rank = sum([typed_primitive.count("P" + obj)
-                                  for obj in non_feasible_ranks])
-                check_wrong_dim_rank = check_wrong_dim_primal + check_wrong_dim_dual +\
-                    check_rank
+                check_wrong_dim_primal = sum(
+                    [
+                        typed_primitive.count("P" + obj)
+                        for obj in non_feasible_dimensions
+                    ]
+                )
+                check_wrong_dim_dual = sum(
+                    [
+                        typed_primitive.count("D" + obj)
+                        for obj in non_feasible_dimensions
+                    ]
+                )
+                check_rank = sum(
+                    [typed_primitive.count("P" + obj) for obj in non_feasible_ranks]
+                )
+                check_wrong_dim_rank = (
+                    check_wrong_dim_primal + check_wrong_dim_dual + check_rank
+                )
                 if check_wrong_dim_rank == 0 and exact_name_check:
                     op = primitives_collection[typed_primitive].op
                     in_types = primitives_collection[typed_primitive].in_types
