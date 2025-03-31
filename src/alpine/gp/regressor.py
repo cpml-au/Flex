@@ -281,7 +281,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
 
         return valid_fit, valid_err
 
-    def __stats(self, pop, gen, evals):
+    def __stats(self, pop, gen, evals, toolbox):
         """Compute and print statistics of a population."""
 
         # LINE_UP = '\033[1A'
@@ -292,7 +292,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         # record the statistics in the logbook
         if self.validate:
             # compute satistics related to the validation set
-            valid_fit, valid_err = self.__compute_valid_stats(pop)
+            valid_fit, valid_err = self.__compute_valid_stats(pop, toolbox)
             record["valid"] = {"valid_fit": valid_fit, "valid_err": valid_err}
 
         self.__logbook.record(gen=gen, evals=evals, **record)
@@ -403,7 +403,16 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
     # @_fit_context(prefer_skip_nested_validation=True)
     def fit(self, X, y=None, X_val=None, y_val=None):
         """Fits the training data using GP-based symbolic regression."""
-        X, y = validate_data(self, X, y, accept_sparse=False)
+        X, y = validate_data(
+            self,
+            X,
+            y,
+            accept_sparse=False,
+            skip_check_array=True,
+            # ensure_2d=False,
+            # allow_nd=True,
+            # multi_output=True,
+        )
 
         # config individual creator and toolbox
         toolbox, pset = self.__creator_toolbox_pset_config()
@@ -453,14 +462,16 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         if self.validate and self.error_metric is not None:
             self.__register_val_funcs(toolbox)
         self.__run(toolbox)
-        self._is_fitted = True
+        self.is_fitted_ = True
         return self
 
     def predict(self, X):
         check_is_fitted(self)
         toolbox, pset = self.__creator_toolbox_pset_config()
         self.__register_map(toolbox)
-        X = self._validate_data(X, accept_sparse=False, reset=False)
+        X = validate_data(
+            self, X, accept_sparse=False, reset=False, skip_check_array=True
+        )
         test_data = {"X": X}
         datasets = {"test": test_data}
         self.__store_datasets(datasets)
@@ -475,7 +486,9 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         check_is_fitted(self)
         toolbox, pset = self.__creator_toolbox_pset_config()
         self.__register_map(toolbox)
-        X, y = self._validate_data(X, y, accept_sparse=False, reset=False)
+        X, y = validate_data(
+            self, X, y, accept_sparse=False, reset=False, skip_check_array=True
+        )
         test_data = {"X": X, "y": y}
         datasets = {"test": test_data}
         self.__store_datasets(datasets)
@@ -628,7 +641,9 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             )
 
             # compute and print population statistics (including all islands)
-            self.__stats(self.__flatten_list(self.__pop), self.__cgen, num_evals)
+            self.__stats(
+                self.__flatten_list(self.__pop), self.__cgen, num_evals, toolbox
+            )
 
             if self.print_log:
                 print("Best individuals of this generation:", flush=True)

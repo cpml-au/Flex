@@ -54,10 +54,24 @@ def test_check_regressor():
         batch_size=100,
     )
 
-    print(gpsr.get_params())
     check_estimator(
         gpsr,
-        expected_failed_checks={"check_regressors_train": "dummy model"},
+        expected_failed_checks={
+            "check_regressors_train": "dummy model",
+            "check_complex_data": "check_array=False",
+            "check_dtype_object": "check_array=False",
+            "check_estimators_empty_data_messages": "check_array=False",
+            "check_estimators_nan_inf": "check_array=False",
+            "check_estimator_sparse_tag": "check_array=False",
+            "check_estimator_sparse_container": "check_array=False",
+            "check_estimator_sparse_array": "check_array=False",
+            "check_estimator_sparse_matrix": "check_array=False",
+            "check_regressor_data_not_an_array": "check_array=False",
+            "check_supervised_y_2d": "check_array=False",
+            "check_supervised_y_no_nan": "check_array=False",
+            "check_fit1d": "check_array=False",
+            "check_fit2d_predict1d": "check_array=False",
+        },
     )
 
     # # Generate synthetic data

@@ -63,20 +63,23 @@ def eval_MSE_sol(
     args = {"y": X}
     prb.set_obj_args(args)
 
-    print(X, y)
     # minimize the objective
     u = prb.solve(x0=u_0.coeffs.flatten(), ftol_abs=1e-12, ftol_rel=1e-12, maxeval=1000)
 
-    if prb.last_opt_result == 1 or prb.last_opt_result == 3 or prb.last_opt_result == 4:
+    if y is not None:
+        if (
+            prb.last_opt_result == 1
+            or prb.last_opt_result == 3
+            or prb.last_opt_result == 4
+        ):
+            MSE = np.mean(np.linalg.norm(u - y) ** 2)
+        else:
+            MSE = math.nan
 
-        MSE = np.mean(np.linalg.norm(u - y) ** 2)
-    else:
-        MSE = math.nan
+        if math.isnan(MSE):
+            MSE = 1e5
 
-    if math.isnan(MSE):
-        MSE = 1e5
-
-    return MSE, u
+    return MSE, [u]
 
 
 def predict(
@@ -145,7 +148,7 @@ cases = ["poisson1d_1.yaml", "poisson1d_2.yaml"]
 
 
 @pytest.mark.parametrize("yamlfile", cases)
-def test_poisson1d(yamlfile):
+def test_poisson1d(set_test_dir, yamlfile):
     filename = os.path.join(os.path.dirname(__file__), yamlfile)
 
     regressor_params, config_file_data = util.load_config_data(filename)
@@ -165,8 +168,8 @@ def test_poisson1d(yamlfile):
     f = C.laplacian(u)
     f.coeffs *= -1.0
 
-    X_train = np.array(f.coeffs, dtype=dctkit.float_dtype)
-    y_train = np.array(u.coeffs.flatten(), dtype=dctkit.float_dtype)
+    X_train = np.array(f.coeffs.ravel(), dtype=dctkit.float_dtype)
+    y_train = np.array(u.coeffs.ravel(), dtype=dctkit.float_dtype)
 
     # initial guess for the unknown of the Poisson problem (cochain of nodals values)
     u_0_vec = np.zeros(num_nodes, dtype=dctkit.float_dtype)
@@ -211,12 +214,8 @@ def test_poisson1d(yamlfile):
 
     fit_score = gpsr.score(X_train, y_train)
 
-    gpsr.__save_best_test_sols(X_train, "./")
+    gpsr.save_best_test_sols(X_train, "./")
 
     ray.shutdown()
     assert np.allclose(u.coeffs.flatten(), np.ravel(u_best))
     assert fit_score <= 1e-12
-
-
-if __name__ == "__main__":
-    test_poisson1d("poisson1d_1.yaml")
