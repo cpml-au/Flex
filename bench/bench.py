@@ -50,22 +50,8 @@ def compute_MSE(individual, X, y, consts=[]):
 # TODO: this could become a library function
 
 
-def compile_individual_with_consts(tree, toolbox, special_term_name="a"):
-    const_idx = 0
-    tree_clone = toolbox.clone(tree)
-    for i, node in enumerate(tree_clone):
-        if isinstance(node, gp.Terminal) and node.name[0:3] != "ARG":
-            if node.name == special_term_name:
-                new_node_name = special_term_name + "[" + str(const_idx) + "]"
-                tree_clone[i] = gp.Terminal(new_node_name, True, float)
-                const_idx += 1
-
-    individual = toolbox.compile(expr=tree_clone, extra_args=[special_term_name])
-    return individual, const_idx
-
-
 def eval_MSE_and_tune_constants(tree, toolbox, X, y):
-    individual, num_consts = compile_individual_with_consts(tree, toolbox)
+    individual, num_consts = util.compile_individual_with_consts(tree, toolbox)
 
     if num_consts > 0:
 
@@ -130,31 +116,28 @@ def get_features_batch(
     return individ_length, nested_trigs, num_trigs
 
 
-@ray.remote(num_cpus=num_cpus)
 def predict(individuals_str_batch, toolbox, X, penalty, fitness_scale):
 
     predictions = [None] * len(individuals_str_batch)
 
     for i, tree in enumerate(individuals_str_batch):
-        callable, _ = compile_individual_with_consts(tree, toolbox)
+        callable, _ = util.compile_individual_with_consts(tree, toolbox)
         predictions[i] = eval_model(callable, X, consts=tree.consts)
 
     return predictions
 
 
-@ray.remote(num_cpus=num_cpus)
 def compute_MSEs(individuals_str_batch, toolbox, X, y, penalty, fitness_scale):
 
     total_errs = [None] * len(individuals_str_batch)
 
     for i, tree in enumerate(individuals_str_batch):
-        callable, _ = compile_individual_with_consts(tree, toolbox)
+        callable, _ = util.compile_individual_with_consts(tree, toolbox)
         total_errs[i] = compute_MSE(callable, X, y, consts=tree.consts)
 
     return total_errs
 
 
-@ray.remote(num_cpus=num_cpus)
 def compute_attributes(individuals_str_batch, toolbox, X, y, penalty, fitness_scale):
 
     attributes = [None] * len(individuals_str_batch)
@@ -238,22 +221,20 @@ def eval(problem, cfgfile, seed=42):
 
     gpsr = gps.GPSymbolicRegressor(
         pset_config=pset,
-        fitness=compute_attributes.remote,
-        predict_func=predict.remote,
-        error_metric=compute_MSEs.remote,
+        fitness=compute_attributes,
+        predict_func=predict,
+        error_metric=compute_MSEs,
         common_data=common_params,
         callback_func=callback_func,
-        print_log=False,
+        print_log=True,
         num_best_inds_str=1,
         save_best_individual=False,
         output_path="./",
         seed_str=None,
         batch_size=batch_size,
+        num_cpus=num_cpus,
         **regressor_params,
     )
-
-    # train_data = Dataset("dataset", X_train_scaled, y_train_scaled)
-    # test_data = Dataset("dataset", X_test_scaled, y_test)
 
     if num_variables > 1:
         X_train = [X_train_scaled[:, i] for i in range(num_variables)]
@@ -266,23 +247,17 @@ def eval(problem, cfgfile, seed=42):
     gpsr.fit(X_train, y_train_scaled)
     toc = time.time()
 
-    if hasattr(gpsr.__best, "consts"):
-        print("Best parameters = ", gpsr.__best.consts)
+    best = gpsr.get_best_individual()
+    if hasattr(best, "consts"):
+        print("Best parameters = ", best.consts)
 
     print("Elapsed time = ", toc - tic)
     individuals_per_sec = (
-        (gpsr.__cgen + 1) * gpsr.NINDIVIDUALS * gpsr.num_islands / (toc - tic)
+        (gpsr.last_gen + 1) * gpsr.NINDIVIDUALS * gpsr.num_islands / (toc - tic)
     )
     print("Individuals per sec = ", individuals_per_sec)
 
     u_best = gpsr.predict(X_test)
-    # print(u_best)
-    # print(y_test)
-
-    # plt.figure()
-    # plt.plot(u_best)
-    # plt.plot(y_test, "+")
-    # plt.show()
 
     # de-scale outputs before computing errors
     if scaleXy:
@@ -317,7 +292,6 @@ def eval(problem, cfgfile, seed=42):
 if __name__ == "__main__":
     import argparse
     import pathlib
-    import ray
 
     # problems = [
     #     "Nguyen-1",
@@ -337,18 +311,17 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("problem", help="Name of the PMLB or Nguyen dataset.")
     parser.add_argument(
-        "-c",
+        "cfgfile",
         type=pathlib.Path,
-        metavar="cfgfile",
         help="Path of the YAML config file for the problem.",
     )
+    parser.add_argument("problem", help="Name of the PMLB or Nguyen dataset.")
 
     args = parser.parse_args()
 
     problem = args.problem
-    cfgfile = args.c
+    cfgfile = args.cfgfile
 
     # problem = "1089_USCrime"
 

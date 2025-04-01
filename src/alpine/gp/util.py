@@ -4,6 +4,7 @@ from importlib import import_module
 from itertools import chain
 import ray
 import numpy as np
+from deap import gp
 
 
 def add_primitives_to_pset_from_dict(pset, primitives_dict):
@@ -125,6 +126,20 @@ def dummy_predict(individuals_str, toolbox, X):
 
 def compile_individuals(toolbox, individuals_str_batch):
     return [toolbox.compile(expr=ind) for ind in individuals_str_batch]
+
+
+def compile_individual_with_consts(tree, toolbox, special_term_name="a"):
+    const_idx = 0
+    tree_clone = toolbox.clone(tree)
+    for i, node in enumerate(tree_clone):
+        if isinstance(node, gp.Terminal) and node.name[0:3] != "ARG":
+            if node.name == special_term_name:
+                new_node_name = special_term_name + "[" + str(const_idx) + "]"
+                tree_clone[i] = gp.Terminal(new_node_name, True, float)
+                const_idx += 1
+
+    individual = toolbox.compile(expr=tree_clone, extra_args=[special_term_name])
+    return individual, const_idx
 
 
 def fitness_value(ind):

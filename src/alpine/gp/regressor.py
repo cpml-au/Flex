@@ -112,6 +112,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         save_train_fit_history: bool = False,
         output_path: str | None = None,
         batch_size=1,
+        num_cpus=1,
     ):
         super().__init__()
         self.pset_config = pset_config
@@ -165,6 +166,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         self.frac_elitist = frac_elitist
 
         self.seed_str = seed_str
+        self.num_cpus = num_cpus
 
     @property
     def n_elitist(self):
@@ -353,7 +355,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         # networkx.nx_agraph.write_dot(graph, "genealogy.dot")
 
     def __get_remote(self, f):
-        return (ray.remote(f)).remote
+        return (ray.remote(f)).options(num_cpus=self.num_cpus).remote
 
     def __register_fitness_func(self, toolbox):
         store = self.__data_store
@@ -686,6 +688,8 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         self.__plot_initialized = False
         print(" -= END OF EVOLUTION =- ", flush=True)
 
+        self.last_gen = self.__cgen
+
         print(f"The best individual is {self.__best}", flush=True)
         print(f"The best fitness on the training set is {self.__train_fit_history[-1]}")
 
@@ -732,6 +736,9 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         np.save(join(output_path, "train_fit_history.npy"), self.__train_fit_history)
         if self.validate:
             np.save(join(output_path, "val_fit_history.npy"), self.val_fit_history)
+
+    def get_best_individual(self):
+        return self.__best
 
     def save_best_test_sols(self, X_test, output_path: str):
         """Compute and save the predictions corresponding to the best individual

@@ -7,13 +7,9 @@ import re
 from alpine.gp import util
 
 
-def compile_individuals(toolbox, individuals_str_batch):
-    return [toolbox.compile(expr=ind) for ind in individuals_str_batch]
-
-
 # Ground truth
-x = np.array([x / 10.0 for x in range(-10, 10)])
-y = x**4 + x**3 + x**2 + x
+x = np.array([x / 10.0 for x in range(-10, 10)]).reshape(-1, 1)
+y = (x**4 + x**3 + x**2 + x).ravel()
 
 
 def check_trig_fn(ind):
@@ -41,17 +37,16 @@ def get_features_batch(
 def eval_MSE_sol(individual, X, y):
     warnings.filterwarnings("ignore")
 
-    y_pred = individual(X)
+    y_pred = individual(X).ravel()
     MSE = np.mean(np.square(y_pred - y))
     if np.isnan(MSE):
         MSE = 1e5
     return MSE, y_pred
 
 
-@ray.remote
 def predict(individuals_str, toolbox, X, penalty):
 
-    callables = compile_individuals(toolbox, individuals_str)
+    callables = util.compile_individuals(toolbox, individuals_str)
 
     u = [None] * len(individuals_str)
 
@@ -61,10 +56,9 @@ def predict(individuals_str, toolbox, X, penalty):
     return u
 
 
-@ray.remote
 def score(individuals_str, toolbox, X, y, penalty):
 
-    callables = compile_individuals(toolbox, individuals_str)
+    callables = util.compile_individuals(toolbox, individuals_str)
 
     MSE = [None] * len(individuals_str)
 
@@ -74,9 +68,8 @@ def score(individuals_str, toolbox, X, y, penalty):
     return MSE
 
 
-@ray.remote
 def fitness(individuals_str, toolbox, X, y, penalty):
-    callables = compile_individuals(toolbox, individuals_str)
+    callables = util.compile_individuals(toolbox, individuals_str)
 
     individ_length, nested_trigs, num_trigs = get_features_batch(individuals_str)
 
@@ -128,9 +121,9 @@ def main():
 
     gpsr = GPSymbolicRegressor(
         pset_config=pset,
-        fitness=fitness.remote,
-        error_metric=score.remote,
-        predict_func=predict.remote,
+        fitness=fitness,
+        error_metric=score,
+        predict_func=predict,
         common_data=common_data,
         NINDIVIDUALS=100,
         num_islands=10,
