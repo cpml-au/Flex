@@ -478,7 +478,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         datasets = {"test": test_data}
         self.__store_datasets(datasets)
         self.__register_predict_func(toolbox)
-        u_best = toolbox.map(toolbox.evaluate_test_sols, (self.__str_best,))[0]
+        u_best = toolbox.map(toolbox.evaluate_test_sols, (self.__best,))[0]
         return u_best
 
     def score(self, X, y):
@@ -739,6 +739,9 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
 
     def get_best_individual(self):
         return self.__best
+
+    def get_last_gen(self):
+        return self.__last_gen
 
     def save_best_test_sols(self, X_test, output_path: str):
         """Compute and save the predictions corresponding to the best individual

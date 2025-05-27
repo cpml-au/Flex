@@ -18,6 +18,7 @@ from datasets import generate_dataset
 import mygrad as mg
 from mygrad._utils.lock_management import mem_guard_off
 
+from functools import partial
 
 num_cpus = 1
 num_runs = 1  # 20
@@ -32,6 +33,11 @@ def check_nested_trig_fn(ind):
 
 
 def eval_model(individual, X, consts=[]):
+    num_variables = X.shape[1]
+    if num_variables > 1:
+        X = [X[:, i] for i in range(num_variables)]
+    else:
+        X = [X]
     warnings.filterwarnings("ignore")
     y_pred = individual(*X, consts)
     return y_pred
@@ -47,28 +53,18 @@ def compute_MSE(individual, X, y, consts=[]):
     return MSE
 
 
-# TODO: this could become a library function
-
-
 def eval_MSE_and_tune_constants(tree, toolbox, X, y):
     individual, num_consts = util.compile_individual_with_consts(tree, toolbox)
 
     if num_consts > 0:
 
-        # TODO: do we really need to redefine this function instead of using the one
-        # outside?
-        def eval_MSE(consts):
-            warnings.filterwarnings("ignore")
-            y_pred = individual(*X, consts)
-            total_err = np.mean((y - y_pred) ** 2)
-
-            return total_err
+        eval_MSE = partial(compute_MSE, individual=individual, X=X, y=y)
 
         x0 = np.ones(num_consts)
 
         class fitting_problem:
             def fitness(self, x):
-                total_err = eval_MSE(x)
+                total_err = eval_MSE(consts=x)
                 # return [total_err + 0.*(np.linalg.norm(x, 2))**2]
                 return [total_err]
 
@@ -103,11 +99,11 @@ def eval_MSE_and_tune_constants(tree, toolbox, X, y):
 
 
 def get_features_batch(
-    individuals_str_batch,
+    individuals_batch,
     individ_feature_extractors=[len, check_nested_trig_fn, check_trig_fn],
 ):
     features_batch = [
-        [fe(i) for i in individuals_str_batch] for fe in individ_feature_extractors
+        [fe(i) for i in individuals_batch] for fe in individ_feature_extractors
     ]
 
     individ_length = features_batch[0]
@@ -116,35 +112,35 @@ def get_features_batch(
     return individ_length, nested_trigs, num_trigs
 
 
-def predict(individuals_str_batch, toolbox, X, penalty, fitness_scale):
+def predict(individuals_batch, toolbox, X, penalty, fitness_scale):
 
-    predictions = [None] * len(individuals_str_batch)
+    predictions = [None] * len(individuals_batch)
 
-    for i, tree in enumerate(individuals_str_batch):
+    for i, tree in enumerate(individuals_batch):
         callable, _ = util.compile_individual_with_consts(tree, toolbox)
         predictions[i] = eval_model(callable, X, consts=tree.consts)
 
     return predictions
 
 
-def compute_MSEs(individuals_str_batch, toolbox, X, y, penalty, fitness_scale):
+def compute_MSEs(individuals_batch, toolbox, X, y, penalty, fitness_scale):
 
-    total_errs = [None] * len(individuals_str_batch)
+    total_errs = [None] * len(individuals_batch)
 
-    for i, tree in enumerate(individuals_str_batch):
+    for i, tree in enumerate(individuals_batch):
         callable, _ = util.compile_individual_with_consts(tree, toolbox)
         total_errs[i] = compute_MSE(callable, X, y, consts=tree.consts)
 
     return total_errs
 
 
-def compute_attributes(individuals_str_batch, toolbox, X, y, penalty, fitness_scale):
+def compute_attributes(individuals_batch, toolbox, X, y, penalty, fitness_scale):
 
-    attributes = [None] * len(individuals_str_batch)
+    attributes = [None] * len(individuals_batch)
 
-    individ_length, nested_trigs, num_trigs = get_features_batch(individuals_str_batch)
+    individ_length, nested_trigs, num_trigs = get_features_batch(individuals_batch)
 
-    for i, tree in enumerate(individuals_str_batch):
+    for i, tree in enumerate(individuals_batch):
 
         # Tarpeian selection
         if individ_length[i] >= 50:
@@ -165,8 +161,8 @@ def compute_attributes(individuals_str_batch, toolbox, X, y, penalty, fitness_sc
     return attributes
 
 
-def assign_attributes(individuals, attributes):
-    for ind, attr in zip(individuals, attributes):
+def assign_attributes(individuals_batch, attributes):
+    for ind, attr in zip(individuals_batch, attributes):
         ind.consts = attr["consts"]
         ind.fitness.values = attr["fitness"]
 
@@ -230,15 +226,8 @@ def eval(problem, cfgfile, seed=42):
         **regressor_params,
     )
 
-    if num_variables > 1:
-        X_train = [X_train_scaled[:, i] for i in range(num_variables)]
-        X_test = [X_test_scaled[:, i] for i in range(num_variables)]
-    else:
-        X_train = [X_train_scaled]
-        X_test = [X_test_scaled]
-
     tic = time.time()
-    gpsr.fit(X_train, y_train_scaled)
+    gpsr.fit(X_train_scaled, y_train_scaled)
     toc = time.time()
 
     best = gpsr.get_best_individual()
@@ -247,11 +236,11 @@ def eval(problem, cfgfile, seed=42):
 
     print("Elapsed time = ", toc - tic)
     individuals_per_sec = (
-        (gpsr.__last_gen + 1) * gpsr.NINDIVIDUALS * gpsr.num_islands / (toc - tic)
+        (gpsr.get_last_gen() + 1) * gpsr.NINDIVIDUALS * gpsr.num_islands / (toc - tic)
     )
     print("Individuals per sec = ", individuals_per_sec)
 
-    u_best = gpsr.predict(X_test)
+    u_best = gpsr.predict(X_test_scaled)
 
     # de-scale outputs before computing errors
     if scaleXy:
@@ -262,7 +251,7 @@ def eval(problem, cfgfile, seed=42):
     print("MSE on the test set = ", MSE)
     print("R^2 on the test set = ", r2_test)
 
-    pred_train = gpsr.predict(X_train)
+    pred_train = gpsr.predict(X_train_scaled)
 
     if scaleXy:
         pred_train = scaler_y.inverse_transform(pred_train.reshape(-1, 1)).flatten()
