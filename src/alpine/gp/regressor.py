@@ -688,7 +688,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         self.__plot_initialized = False
         print(" -= END OF EVOLUTION =- ", flush=True)
 
-        self.last_gen = self.__cgen
+        self.__last_gen = self.__cgen
 
         print(f"The best individual is {self.__best}", flush=True)
         print(f"The best fitness on the training set is {self.__train_fit_history[-1]}")

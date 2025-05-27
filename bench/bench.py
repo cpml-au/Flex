@@ -210,12 +210,6 @@ def eval(problem, cfgfile, seed=42):
     callback_func = assign_attributes
     fitness_scale = 1.0
 
-    # if problem == "C1":
-    #     batch_size = 100
-    #     fitness_scale = 1e6
-    #     config_file_data["gp"]["penalty"]["reg_param"] = 0.0
-    #     pset.addTerminal(object, float, "a")
-
     penalty = config_file_data["gp"]["penalty"]
     common_params = {"penalty": penalty, "fitness_scale": fitness_scale}
 
@@ -253,7 +247,7 @@ def eval(problem, cfgfile, seed=42):
 
     print("Elapsed time = ", toc - tic)
     individuals_per_sec = (
-        (gpsr.last_gen + 1) * gpsr.NINDIVIDUALS * gpsr.num_islands / (toc - tic)
+        (gpsr.__last_gen + 1) * gpsr.NINDIVIDUALS * gpsr.num_islands / (toc - tic)
     )
     print("Individuals per sec = ", individuals_per_sec)
 
