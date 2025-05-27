@@ -52,12 +52,6 @@ def load_config_data(filename):
 
     regressor_params["validate"] = config_file_data["gp"]["validate"]
 
-    regressor_params["immigration_enabled"] = config_file_data["gp"]["immigration"][
-        "enabled"
-    ]
-    regressor_params["immigration_freq"] = config_file_data["gp"]["immigration"]["freq"]
-    regressor_params["immigration_frac"] = config_file_data["gp"]["immigration"]["frac"]
-
     return regressor_params, config_file_data
 
 

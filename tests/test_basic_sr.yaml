@@ -23,7 +23,6 @@ gp:
   crossover:
     fun: gp.cxOnePoint
     kargs: "{}"
-  immigration: { "enabled": False, "freq": 10, "frac": 0.9 }
   primitives:
     imports: { "alpine.gp.jax_primitives": ["jax_primitives"] }
     used:

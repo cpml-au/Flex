@@ -91,9 +91,6 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         MUTPB: float = 0.2,
         frac_elitist: float = 0.0,
         overlapping_generation: bool = False,
-        immigration_enabled: bool = False,
-        immigration_freq: int = 0,
-        immigration_frac: float = 0.0,
         error_metric: Callable | None = None,
         predict_func: Callable | None = None,
         common_data: Dict | None = None,
@@ -156,9 +153,6 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         self.max_height = max_height
         self.mig_freq = mig_freq
         self.mig_frac = mig_frac
-        self.immigration_enabled = immigration_enabled
-        self.immigration_frac = immigration_frac
-        self.immigration_freq = immigration_freq
 
         self.overlapping_generation = overlapping_generation
         self.validate = validate
@@ -261,6 +255,16 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             if not isinstance(value, ray.ObjectRef):
                 data[key] = ray.put(value)
         self.__data_store[label] = data
+
+    def __fetch_shared_objects(self, stored_data):
+        fetched_data = dict()
+        for key, value in stored_data.items():
+            if isinstance(value, ray.ObjectRef):
+                fetched_data[key] = ray.get(value)
+            else:
+                fetched_data[key] = value
+
+        return fetched_data
 
     def __init_logbook(self):
         # Initialize logbook to collect statistics
@@ -378,24 +382,6 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             "evaluate_val_MSE", self.__get_remote(self.error_metric), **args_val
         )
 
-    def __register_score_func(self, toolbox):
-        store = self.__data_store
-        args_score_func = store["common"] | store["test"]
-        toolbox.register(
-            "evaluate_test_score",
-            self.__get_remote(self.error_metric),
-            **args_score_func,
-        )
-
-    def __register_predict_func(self, toolbox):
-        store = self.__data_store
-        args_predict_func = store["common"] | store["test"]
-        toolbox.register(
-            "evaluate_test_sols",
-            self.__get_remote(self.predict_func),
-            **args_predict_func,
-        )
-
     def __register_map(self, toolbox):
         toolbox_ref = ray.put(toolbox)
         toolbox.register(
@@ -470,15 +456,15 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
     def predict(self, X):
         check_is_fitted(self)
         toolbox, pset = self.__creator_toolbox_pset_config()
-        self.__register_map(toolbox)
         X = validate_data(
             self, X, accept_sparse=False, reset=False, skip_check_array=True
         )
         test_data = {"X": X}
-        datasets = {"test": test_data}
-        self.__store_datasets(datasets)
-        self.__register_predict_func(toolbox)
-        u_best = toolbox.map(toolbox.evaluate_test_sols, (self.__best,))[0]
+        store = self.__data_store
+        args_predict_func = self.__fetch_shared_objects(store["common"]) | test_data
+        u_best = self.predict_func(
+            (self.__best,), toolbox=toolbox, **args_predict_func
+        )[0]
         return u_best
 
     def score(self, X, y):
@@ -487,22 +473,14 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         """
         check_is_fitted(self)
         toolbox, pset = self.__creator_toolbox_pset_config()
-        self.__register_map(toolbox)
         X, y = validate_data(
             self, X, y, accept_sparse=False, reset=False, skip_check_array=True
         )
         test_data = {"X": X, "y": y}
-        datasets = {"test": test_data}
-        self.__store_datasets(datasets)
-        self.__register_score_func(toolbox)
-        score = toolbox.map(toolbox.evaluate_test_score, (self.__best,))[0]
+        store = self.__data_store
+        args_score_func = self.__fetch_shared_objects(store["common"]) | test_data
+        score = self.error_metric((self.__best,), toolbox=toolbox, **args_score_func)[0]
         return score
-
-    def __immigration(self, pop, num_immigrants: int, toolbox):
-        immigrants = toolbox.population(n=num_immigrants)
-        for i in range(num_immigrants):
-            idx_individual_to_replace = random.randint(0, self.NINDIVIDUALS - 1)
-            pop[idx_individual_to_replace] = immigrants[i]
 
     def __flatten_list(self, nested_lst):
         flat_list = []
@@ -528,12 +506,6 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         elite_inds = [None] * self.num_islands
 
         for i in range(self.num_islands):
-            if self.immigration_enabled:
-                if cgen % self.immigration_freq == 0:
-                    self.__immigration(
-                        self.__pop[i], int(self.immigration_frac * self.NINDIVIDUALS)
-                    )
-
             # Select the parents for the offspring
             offsprings[i] = list(map(toolbox.clone, toolbox.select(self.__pop[i])))
 
@@ -584,8 +556,6 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
                 int(self.mig_frac * self.NINDIVIDUALS),
                 selection=random.sample,
             )
-
-        # self.__local_search()
 
         return num_evals
 

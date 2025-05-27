@@ -1,6 +1,6 @@
 gp:
   NINDIVIDUALS: 1000 # 1000
-  NGEN: 1 # 200
+  NGEN: 100 # 200
   multi_island:
     num_islands: 5 # 15
     migration: { "freq": 10, "frac": 0.05 }
@@ -25,7 +25,6 @@ gp:
   crossover:
     fun: gp.cxOnePoint
     kargs: "{}"
-  immigration: { "enabled": False, "freq": 80, "frac": 0.95 }
   scaleXy: True
   batch_size: 10
   use_constants: True
