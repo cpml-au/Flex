@@ -22,11 +22,11 @@ def check_nested_trig_fn(ind):
 
 
 def get_features_batch(
-    individuals_str_batch,
+    individuals_batch,
     individ_feature_extractors=[len, check_nested_trig_fn, check_trig_fn],
 ):
     features_batch = [
-        [fe(i) for i in individuals_str_batch] for fe in individ_feature_extractors
+        [fe(i) for i in individuals_batch] for fe in individ_feature_extractors
     ]
 
     individ_length = features_batch[0]
@@ -45,11 +45,11 @@ def eval_MSE_sol(individual, X, y):
     return MSE, y_pred
 
 
-def predict(individuals_str, toolbox, X, penalty):
+def predict(individuals_batch, toolbox, X, penalty):
 
-    callables = util.compile_individuals(toolbox, individuals_str)
+    callables = util.compile_individuals(toolbox, individuals_batch)
 
-    u = [None] * len(individuals_str)
+    u = [None] * len(individuals_batch)
 
     for i, ind in enumerate(callables):
         _, u[i] = eval_MSE_sol(ind, X, None)
@@ -57,11 +57,11 @@ def predict(individuals_str, toolbox, X, penalty):
     return u
 
 
-def score(individuals_str, toolbox, X, y, penalty):
+def score(individuals_batch, toolbox, X, y, penalty):
 
-    callables = util.compile_individuals(toolbox, individuals_str)
+    callables = util.compile_individuals(toolbox, individuals_batch)
 
-    MSE = [None] * len(individuals_str)
+    MSE = [None] * len(individuals_batch)
 
     for i, ind in enumerate(callables):
         MSE[i], _ = eval_MSE_sol(ind, X, y)
@@ -69,12 +69,12 @@ def score(individuals_str, toolbox, X, y, penalty):
     return MSE
 
 
-def fitness(individuals_str, toolbox, X, y, penalty):
-    callables = util.compile_individuals(toolbox, individuals_str)
+def fitness(individuals_batch, toolbox, X, y, penalty):
+    callables = util.compile_individuals(toolbox, individuals_batch)
 
-    individ_length, nested_trigs, num_trigs = get_features_batch(individuals_str)
+    individ_length, nested_trigs, num_trigs = get_features_batch(individuals_batch)
 
-    fitnesses = [None] * len(individuals_str)
+    fitnesses = [None] * len(individuals_batch)
     for i, ind in enumerate(callables):
         if individ_length[i] >= 50:
             fitnesses[i] = (1e8,)

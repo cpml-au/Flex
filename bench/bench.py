@@ -213,7 +213,6 @@ def eval(problem, cfgfile, seed=42):
         pset_config=pset,
         fitness=compute_attributes,
         predict_func=predict,
-        error_metric=compute_MSEs,
         common_data=common_params,
         callback_func=callback_func,
         print_log=True,

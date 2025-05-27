@@ -3,7 +3,7 @@
 # AlpineGP
 
 _AlpineGP_ is a Python library for **symbolic regression** via _Genetic Programming_.
-It provides a high-level interface to the [`DEAP`](https://github.com/alucantonio/DEAP)
+It provides a high-level interface to the [`DEAP`](https://github.com/cpml-au/deap)
 library, including distributed computing functionalities.
 
 Besides solving classical symbolic regression problems involving _algebraic equations_
@@ -11,13 +11,13 @@ Besides solving classical symbolic regression problems involving _algebraic equa
 [SRBench](https://github.com/cavalab/srbench) repository), _AlpineGP_ is specifically
 designed to help identifying _symbolic_ models of _physical systems_ governed by **field equations**.
 To this aim, it allows to exploit the **discrete calculus** framework defined and implemented in the library
-[`dctkit`](https://github.com/alucantonio/dctkit) as a natural and effective language to express physical models
+[`dctkit`](https://github.com/cpml-au/dctkit) as a natural and effective language to express physical models
 (i.e., conservation laws).
 
 _AlpineGP_ has been introduced in the paper [_Discovering interpretable physical models
 with symbolic regression and discrete exterior calculus_](https://iopscience.iop.org/article/10.1088/2632-2153/ad1af2),
 along with several benchmark problems (heat transfer, linear elasticity, Euler's
-elastica). Scripts to reproduce these benchmarks can be found [here](https://github.com/alucantonio/MLST2024_SRDEC).
+elastica). Scripts to reproduce these benchmarks can be found [here](https://github.com/cpml-au/SR-DEC_Examples).
 
 **Features**:
 - distributed computing provided by the [`ray`](https://www.ray.io) library;
@@ -65,25 +65,12 @@ To run the benchmarks, cd into the `bench` folder and execute:
 ```bash
 $ ./bench.sh
 ```
-Then process the results using the `process_results` notebook.
+Then, process the results using the `process_results` notebook.
 
 ## Usage
 
 Setting up a symbolic regression problem in _AlpineGP_ involves several key steps:
-
-1. Define the function that computes the prediction associated to an _individual_
-(model expression tree). Its arguments may be a _function_ obtained by parsing the
-individual tree and possibly other parameters, such as the features (`X`) needed to evaluate
-the model. It returns both the error between the predictions and the labels (`y`) and
-the predictions themselves. 
-```python
-def eval_MSE_sol(individual, X, y):
-
-    # ...
-    return MSE, prediction
-```
-
-2. Define the functions that return the **prediction** and the **fitness** 
+1. Define the functions that return the **prediction** and the **fitness** 
    associated to an individual. These functions **must** have at least the following
    arguments in the first three positions:
    - the list of trees to be evaluated by the current worker;
@@ -93,30 +80,27 @@ def eval_MSE_sol(individual, X, y):
 
 Additionally, the fourth argument of the **fitness** function **must** be the dataset
 labels, called `y`. For unsupervised problems, `None` can be passed for the labels to
-the `fit` method of the regressor. Both functions **must** be decorated with `ray.remote` to support
-distributed evaluation (multiprocessing). Any additional arguments can be set using
+the `fit` method of the regressor. Any additional arguments can be set using
 the `common_data` argument of the `GPSymbolicRegressor` object (see below). 
 ```python
-@ray.remote
-def predict(trees, toolbox, X):
+def predict(individuals_batch, toolbox, X):
 
-    callables = compile_individuals(toolbox, trees)
+    predictions = [None] * len(individuals_batch)
 
-    preds = [None]*len(trees)
+    for i, tree in enumerate(individuals_batch):
+        callable, _ = util.compile_individual_with_consts(tree, toolbox)
+        # predictions[i] = ...
+    # ...
+    return predictions
 
-    for i, ind in enumerate(callables):
-        _, preds[i] = eval_MSE_sol(ind, X, None)
-
-    return preds
-
-@ray.remote
-def fitness(trees, toolbox, X, y):
-    callables = compile_individuals(toolbox, trees)
+def fitness(individuals_batch, toolbox, X, y):
 
     fitnesses = [None]*len(trees)
 
-    for i, ind in enumerate(callables):
-        MSE, _ = eval_MSE_sol(ind, X, y)
+    for i, tree in enumerate(individuals_batch):
+        
+        callable, _ = util.compile_individual_with_consts(tree, toolbox)
+        # MSE = ...
         
         # each fitness MUST be a tuple (required by DEAP)
         fitnesses[i] = (MSE,)
@@ -124,46 +108,56 @@ def fitness(trees, toolbox, X, y):
     return fitnesses
 ```
 
-3. Set up and solve the symbolic regression problem. The configuration of the
+_Optionally_, you can define a `score` function with the same arguments as those of the
+fitness function, to compute the score (e.g. $R^2$) of the best model found during the
+SR run on a given dataset.
+
+2. Set up and solve the symbolic regression problem. The configuration of the
    `GPSymbolicRegressor` object can be specified via the arguments of its constructor
    (see the API docs), or loaded from a YAML file.
 ```python
-# read config parameters from YAML file
-yamlfile = "ex1.yaml"
+yamlfile = "simple_sr.yaml"
 filename = os.path.join(os.path.dirname(__file__), yamlfile)
 
 regressor_params, config_file_data = util.load_config_data(filename)
+
+# pset = gp.PrimitiveSetTyped(...)
+# pset.renameArguments(ARG0="x")
+
+pset = util.add_primitives_to_pset_from_dict(
+    pset, config_file_data["gp"]["primitives"]
+)
+
+# define extra common arguments of fitness and predict functions
+penalty = config_file_data["gp"]["penalty"]
+common_data = {"penalty": penalty}
 
 # ...
 # ...
 
 # load datasets...
 
-# define the primitive set (input/output types)
-pset = gp.PrimitiveSetTyped(...)
+gpsr = GPSymbolicRegressor(
+    pset_config=pset,
+    fitness=fitness,
+    error_metric=score,
+    predict_func=predict,
+    common_data=common_data,
+    print_log=True,
+    batch_size=100,
+    **regressor_params
+)
 
-# rename arguments of the tree function
-pset.renameArguments(ARG0="u")
-
-# define extra common arguments of fitness and predict functions
-common_params = {'penalty': penalty}
-
-# create the Symbolic Regression Problem object
-gpsr = gps.GPSymbolicRegressor(pset=pset, fitness=fitness.remote,
-                               predict_func=predict.remote, common_data=common_params,
-                               print_log=True, 
-                               **regressor_params)
-
-# solve the symbolic regression problem
+# run the symbolic regression
 gpsr.fit(X_train, y_train)
 
 # compute the prediction on the test dataset given by the best model found during the SR
 pred_test = gpsr.predict(X_test)
 ```
 
-A complete example notebook can be found in the `examples` directory. Also check the
-`simple_sr.py` script for an introductory example (use it as a template/skeleton for
-defining your symbolic regression problem).
+Complete example scripts can be found in the `examples` directory. In particular, the
+`simple_sr.py` script may be used as a template/skeleton for defining your symbolic
+regression problem.
 
 ## Citing
 ```

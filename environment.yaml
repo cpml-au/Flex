@@ -8,7 +8,6 @@ dependencies:
   - jaxopt
   - numpy
   - pygmo
-#  - python
   - python==3.12
   - python-gmsh
   - trame
