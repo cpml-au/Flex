@@ -201,7 +201,7 @@ def eval(problem, cfgfile, seed=42):
 
     batch_size = config_file_data["gp"]["batch_size"]
     if config_file_data["gp"]["use_constants"]:
-        pset.addTerminal(object, float, "a")
+        pset.addTerminal(object, float, "c")
 
     callback_func = assign_attributes
     fitness_scale = 1.0
@@ -235,7 +235,10 @@ def eval(problem, cfgfile, seed=42):
 
     print("Elapsed time = ", toc - tic)
     individuals_per_sec = (
-        (gpsr.get_last_gen() + 1) * gpsr.NINDIVIDUALS * gpsr.num_islands / (toc - tic)
+        (gpsr.get_last_gen() + 1)
+        * gpsr.num_individuals
+        * gpsr.num_islands
+        / (toc - tic)
     )
     print("Individuals per sec = ", individuals_per_sec)
 

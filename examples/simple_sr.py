@@ -115,7 +115,7 @@ def main():
     gpsr = GPSymbolicRegressor(
         pset_config=pset,
         fitness=fitness,
-        error_metric=score,
+        score_func=score,
         predict_func=predict,
         common_data=common_data,
         print_log=True,

@@ -32,8 +32,8 @@ def load_config_data(filename):
         config_file_data = yaml.safe_load(config_file)
 
     regressor_params = dict()
-    regressor_params["NINDIVIDUALS"] = config_file_data["gp"]["NINDIVIDUALS"]
-    regressor_params["NGEN"] = config_file_data["gp"]["NGEN"]
+    regressor_params["num_individuals"] = config_file_data["gp"]["num_individuals"]
+    regressor_params["generations"] = config_file_data["gp"]["generations"]
     regressor_params["num_islands"] = config_file_data["gp"]["multi_island"][
         "num_islands"
     ]
@@ -44,7 +44,7 @@ def load_config_data(filename):
         "frac"
     ]
     regressor_params["crossover_prob"] = config_file_data["gp"]["crossover_prob"]
-    regressor_params["MUTPB"] = config_file_data["gp"]["MUTPB"]
+    regressor_params["mut_prob"] = config_file_data["gp"]["mut_prob"]
     regressor_params["frac_elitist"] = config_file_data["gp"]["frac_elitist"]
     regressor_params["overlapping_generation"] = config_file_data["gp"][
         "overlapping_generation"
@@ -122,7 +122,7 @@ def compile_individuals(toolbox, individuals_str_batch):
     return [toolbox.compile(expr=ind) for ind in individuals_str_batch]
 
 
-def compile_individual_with_consts(tree, toolbox, special_term_name="a"):
+def compile_individual_with_consts(tree, toolbox, special_term_name="c"):
     const_idx = 0
     tree_clone = toolbox.clone(tree)
     for i, node in enumerate(tree_clone):

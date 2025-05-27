@@ -72,6 +72,8 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         self,
         pset_config: gp.PrimitiveSet | gp.PrimitiveSetTyped,
         fitness: Callable,
+        predict_func: Callable,
+        score_func: Callable | None = None,
         select_fun: str = "tools.selection.tournament_with_elitism",
         select_args: str = "{'num_elitist': self.n_elitist, 'tournsize': 3, 'stochastic_tourn': { 'enabled': False, 'prob': [0.8, 0.2] }}",  # noqa: E501
         mut_fun: str = "gp.mutUniform",
@@ -82,17 +84,15 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         crossover_args: str = "{}",
         min_height: int = 1,
         max_height: int = 3,
-        NINDIVIDUALS: int = 10,
-        NGEN: int = 1,
+        num_individuals: int = 10,
+        generations: int = 1,
         num_islands: int = 1,
         mig_freq: int = 10,
         mig_frac: float = 0.05,
         crossover_prob: float = 0.5,
-        MUTPB: float = 0.2,
+        mut_prob: float = 0.2,
         frac_elitist: float = 0.0,
         overlapping_generation: bool = False,
-        error_metric: Callable | None = None,
-        predict_func: Callable | None = None,
         common_data: Dict | None = None,
         validate: bool = False,
         preprocess_func: Callable | None = None,
@@ -115,7 +115,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         self.pset_config = pset_config
 
         self.fitness = fitness
-        self.error_metric = error_metric
+        self.score_func = score_func
         self.predict_func = predict_func
 
         self.plot_best = plot_best
@@ -136,11 +136,11 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
 
         self.common_data = common_data
 
-        self.NINDIVIDUALS = NINDIVIDUALS
-        self.NGEN = NGEN
+        self.num_individuals = num_individuals
+        self.generations = generations
         self.num_islands = num_islands
         self.crossover_prob = crossover_prob
-        self.MUTPB = MUTPB
+        self.mut_prob = mut_prob
         self.select_fun = select_fun
         self.select_args = select_args
         self.mut_fun = mut_fun
@@ -164,7 +164,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
 
     @property
     def n_elitist(self):
-        return int(self.frac_elitist * self.NINDIVIDUALS)
+        return int(self.frac_elitist * self.num_individuals)
 
     def get_params(self, deep=True):
         return self.__dict__
@@ -227,7 +227,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             ]
         return toolbox, pset
 
-    def __store_fit_error_common_args(self, data: Dict):
+    def __store_fit_score_common_args(self, data: Dict):
         """Store names and values of the arguments that are in common between
         the fitness and the error metric functions in the common object space.
 
@@ -379,7 +379,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             "evaluate_val_fit", self.__get_remote(self.fitness), **args_val
         )
         toolbox.register(
-            "evaluate_val_MSE", self.__get_remote(self.error_metric), **args_val
+            "evaluate_val_MSE", self.__get_remote(self.score_func), **args_val
         )
 
     def __register_map(self, toolbox):
@@ -409,7 +409,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
 
         if self.common_data is not None:
             # FIXME: does everything work when the functions do not have common args?
-            self.__store_fit_error_common_args(self.common_data)
+            self.__store_fit_score_common_args(self.common_data)
 
         # Initialize variables for statistics
         self.__stats_fit = tools.Statistics(fitness_value)
@@ -447,7 +447,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             datasets = {"train": train_data}
         self.__store_datasets(datasets)
         self.__register_fitness_func(toolbox)
-        if self.validate and self.error_metric is not None:
+        if self.validate and self.score_func is not None:
             self.__register_val_funcs(toolbox)
         self.__run(toolbox)
         self.is_fitted_ = True
@@ -479,7 +479,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         test_data = {"X": X, "y": y}
         store = self.__data_store
         args_score_func = self.__fetch_shared_objects(store["common"]) | test_data
-        score = self.error_metric((self.__best,), toolbox=toolbox, **args_score_func)[0]
+        score = self.score_func((self.__best,), toolbox=toolbox, **args_score_func)[0]
         return score
 
     def __flatten_list(self, nested_lst):
@@ -514,9 +514,9 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             offsprings[i] = elite_inds[i] + algorithms.varOr(
                 offsprings[i],
                 toolbox,
-                self.NINDIVIDUALS - self.n_elitist,
+                self.num_individuals - self.n_elitist,
                 self.crossover_prob,
-                self.MUTPB,
+                self.mut_prob,
             )
 
             # add individuals subject to cross-over and mutation to the list of invalids
@@ -546,27 +546,25 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             else:
                 # parents and offspring compete for survival (truncation selection)
                 self.__pop[i] = tools.selBest(
-                    self.__pop[i] + offsprings[i], self.NINDIVIDUALS
+                    self.__pop[i] + offsprings[i], self.num_individuals
                 )
 
         # migrations among islands
         if cgen % self.mig_frac == 0 and self.num_islands > 1:
             migRing(
                 self.__pop,
-                int(self.mig_frac * self.NINDIVIDUALS),
+                int(self.mig_frac * self.num_individuals),
                 selection=random.sample,
             )
 
         return num_evals
 
     def __run(self, toolbox):
-        """Runs symbolic regression."""
-
         # Generate initial population
         print("Generating initial population(s)...", flush=True)
         self.__pop = [None] * self.num_islands
         for i in range(self.num_islands):
-            self.__pop[i] = toolbox.population(n=self.NINDIVIDUALS)
+            self.__pop[i] = toolbox.population(n=self.num_individuals)
 
         print("DONE.", flush=True)
 
@@ -601,7 +599,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
 
         print("DONE.", flush=True)
 
-        for gen in range(self.NGEN):
+        for gen in range(self.generations):
             self.__cgen = gen + 1
 
             num_evals = self.__evolve_islands(self.__cgen, toolbox)
@@ -644,13 +642,13 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
                 and (
                     self.__cgen % self.plot_freq == 0
                     or self.__cgen == 1
-                    or self.__cgen == self.NGEN
+                    or self.__cgen == self.generations
                 )
             ):
                 toolbox.plot_best_func(best_inds[0])
 
             self.__best = best_inds[0]
-            self.__str_best = str(self.__best)
+
             if self.__best.fitness.values[0] <= 1e-15:
                 print("EARLY STOPPING.")
                 break

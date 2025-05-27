@@ -153,6 +153,8 @@ gpsr.fit(X_train, y_train)
 
 # compute the prediction on the test dataset given by the best model found during the SR
 pred_test = gpsr.predict(X_test)
+
+ray.shutdown()
 ```
 
 Complete example scripts can be found in the `examples` directory. In particular, the

@@ -1,11 +1,11 @@
 gp:
-  NINDIVIDUALS: 100
-  NGEN: 200
+  num_individuals: 100
+  generations: 200
   multi_island:
     num_islands: 10
     migration: { "freq": 10, "frac": 0.05 }
   crossover_prob: 0.9
-  MUTPB: 0.1
+  mut_prob: 0.1
   frac_elitist: 0
   min_: 2
   max_: 6
