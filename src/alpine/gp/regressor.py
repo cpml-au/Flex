@@ -90,6 +90,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         num_individuals: int = 10,
         generations: int = 1,
         num_islands: int = 1,
+        check_duplicates: bool = False,
         mig_freq: int = 10,
         mig_frac: float = 0.05,
         crossover_prob: float = 0.5,
@@ -168,6 +169,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
 
         self.seed_str = seed_str
         self.num_cpus = num_cpus
+        self.check_duplicates = check_duplicates
         self.max_calls = max_calls
         self.custom_logger = custom_logger
         self.special_term_name = special_term_name
@@ -606,13 +608,34 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             print("Seeding population with individuals...", flush=True)
             self.__pop[0][: len(self.seed_ind)] = self.seed_ind
 
-        print(" -= START OF EVOLUTION =- ", flush=True)
-
-        # Evaluate the fitness of the entire population on the training set
-        print("Evaluating initial population(s)...", flush=True)
+        if self.check_duplicates:
+            print("Removing duplicates from initial population(s)...", flush=True)
+            for idx_island in range(self.num_islands):
+                while True:
+                    fitnesses = toolbox.map(
+                        toolbox.evaluate_train, self.__pop[idx_island]
+                    )
+                    fitness_array = np.array(fitnesses)
+                    # Identify unique fitness indices
+                    _, idx_unique = np.unique(fitness_array, axis=0, return_index=True)
+                    # Identify indices with fitness above threshold
+                    threshold_indices = np.where(fitness_array[:, 0] > 1e5)[0]
+                    # Combine duplicate and threshold-exceeding indices
+                    dup_indices = np.setdiff1d(np.arange(len(fitnesses)), idx_unique)
+                    bad_indices = np.unique(
+                        np.concatenate([dup_indices, threshold_indices])
+                    )
+                    if len(bad_indices) == 0:
+                        break
+                    for idx in bad_indices:
+                        self.__pop[idx_island][idx] = toolbox.individual()
+            print("DONE.", flush=True)
 
         if self.preprocess_func is not None:
             self.preprocess_func(self.__pop)
+
+        # Evaluate the fitness of the entire population on the training set
+        print("Evaluating initial population(s)...", flush=True)
 
         for i in range(self.num_islands):
             fitnesses = toolbox.map(toolbox.evaluate_train, self.__pop[i])
@@ -623,10 +646,12 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
                 for ind, fit in zip(self.__pop[i], fitnesses):
                     ind.fitness.values = fit
 
+        print("DONE.", flush=True)
+
         if self.validate:
             print("Using validation dataset.", flush=True)
 
-        print("DONE.", flush=True)
+        print(" -= START OF EVOLUTION =- ", flush=True)
 
         for gen in range(self.generations):
             self.__cgen = gen + 1
@@ -681,7 +706,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             self.__best = best_inds[0]
 
             if self.__best.fitness.values[0] <= 1e-15:
-                print("EARLY STOPPING.", flush=True)
+                print("Fitness threshold reached - STOPPING.")
                 break
 
         self.__plot_initialized = False
