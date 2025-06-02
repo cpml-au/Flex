@@ -225,6 +225,7 @@ def eval(problem, cfgfile, seed=42, grid_search=False):
         seed_str=None,
         batch_size=batch_size,
         num_cpus=num_cpus,
+        check_duplicates=True,
         **regressor_params,
     )
 

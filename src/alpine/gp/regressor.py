@@ -590,6 +590,9 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
 
         return num_evals
 
+    def __eval_attributes(self):
+        pass
+
     def __run(self, toolbox):
         # Generate initial population
         print("Generating initial population(s)...", flush=True)
@@ -610,12 +613,17 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
 
         if self.check_duplicates:
             print("Removing duplicates from initial population(s)...", flush=True)
-            for idx_island in range(self.num_islands):
+            for i in range(self.num_islands):
                 while True:
-                    fitnesses = toolbox.map(
-                        toolbox.evaluate_train, self.__pop[idx_island]
+                    fitnesses = toolbox.map(toolbox.evaluate_train, self.__pop[i])
+                    if self.callback_func is not None:
+                        self.callback_func(self.__pop[i], fitnesses)
+                    else:
+                        for ind, fit in zip(self.__pop[i], fitnesses):
+                            ind.fitness.values = fit
+                    fitness_array = np.array(
+                        [ind.fitness.values[0] for ind in self.__pop[i]]
                     )
-                    fitness_array = np.array([fit[0] for fit in fitnesses])
                     # Identify unique fitness indices
                     _, idx_unique = np.unique(fitness_array, return_index=True)
                     # Identify duplicate indices
@@ -629,7 +637,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
                     if len(bad_indices) == 0:
                         break
                     for idx in bad_indices:
-                        self.__pop[idx_island][idx] = toolbox.individual()
+                        self.__pop[i][idx] = toolbox.individual()
             print("DONE.", flush=True)
 
         if self.preprocess_func is not None:
