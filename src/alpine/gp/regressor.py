@@ -615,13 +615,14 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
                     fitnesses = toolbox.map(
                         toolbox.evaluate_train, self.__pop[idx_island]
                     )
-                    fitness_array = np.array(fitnesses)
+                    fitness_array = np.array([fit[0] for fit in fitnesses])
                     # Identify unique fitness indices
-                    _, idx_unique = np.unique(fitness_array, axis=0, return_index=True)
-                    # Identify indices with fitness above threshold
-                    threshold_indices = np.where(fitness_array[:, 0] > 1e5)[0]
-                    # Combine duplicate and threshold-exceeding indices
+                    _, idx_unique = np.unique(fitness_array, return_index=True)
+                    # Identify duplicate indices
                     dup_indices = np.setdiff1d(np.arange(len(fitnesses)), idx_unique)
+                    # Identify indices with fitness above threshold
+                    threshold_indices = np.where(fitness_array > 1e5)[0]
+                    # Combine both types of bad indices
                     bad_indices = np.unique(
                         np.concatenate([dup_indices, threshold_indices])
                     )
