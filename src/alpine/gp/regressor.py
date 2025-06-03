@@ -162,6 +162,14 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         self.seed_str = seed_str
         self.num_cpus = num_cpus
 
+    def __sklearn_tags__(self):
+        # since we are allowing cases in which y=None
+        # we need to modify the tag requires_y to False
+        # (check sklearn docs)
+        tags = super().__sklearn_tags__()
+        tags.target_tags.required = False
+        return tags
+
     @property
     def n_elitist(self):
         return int(self.frac_elitist * self.num_individuals)
@@ -391,7 +399,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
     # @_fit_context(prefer_skip_nested_validation=True)
     def fit(self, X, y=None, X_val=None, y_val=None):
         """Fits the training data using GP-based symbolic regression."""
-        X, y = validate_data(
+        validated_data = validate_data(
             self,
             X,
             y,
@@ -401,6 +409,12 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             # allow_nd=True,
             # multi_output=True,
         )
+        if y is None:
+            X = validated_data
+            train_data = {"X": X}
+        else:
+            X, y = validated_data
+            train_data = {"X": X, "y": y}
 
         # config individual creator and toolbox
         toolbox, pset = self.__creator_toolbox_pset_config()
@@ -439,7 +453,6 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         self.__plot_initialized = False
         self.__fig_id = 0
 
-        train_data = {"X": X, "y": y}
         if self.validate and X_val is not None:
             val_data = {"X": X_val, "y": y_val}
             datasets = {"train": train_data, "val": val_data}
@@ -467,16 +480,21 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         )[0]
         return u_best
 
-    def score(self, X, y):
+    def score(self, X, y=None):
         """Computes the error metric (passed to the `GPSymbolicRegressor` constructor)
         on a given dataset.
         """
         check_is_fitted(self)
         toolbox, pset = self.__creator_toolbox_pset_config()
-        X, y = validate_data(
+        validated_data = validate_data(
             self, X, y, accept_sparse=False, reset=False, skip_check_array=True
         )
-        test_data = {"X": X, "y": y}
+        if y is None:
+            X = validated_data
+            test_data = {"X": X}
+        else:
+            X, y = validated_data
+            test_data = {"X": X, "y": y}
         store = self.__data_store
         args_score_func = self.__fetch_shared_objects(store["common"]) | test_data
         score = self.score_func((self.__best,), toolbox=toolbox, **args_score_func)[0]
