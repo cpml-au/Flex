@@ -20,6 +20,7 @@ along with several benchmark problems (heat transfer, linear elasticity, Euler's
 elastica). Scripts to reproduce these benchmarks can be found [here](https://github.com/cpml-au/SR-DEC_Examples).
 
 **Features**:
+
 - distributed computing provided by the [`ray`](https://www.ray.io) library;
 - scikit-learn compatible interface;
 - hyperparameter configuration via YAML files and optimization via `optuna`;
@@ -62,15 +63,18 @@ $ tox -e docs
 ## Benchmarks
 
 To run the benchmarks, cd into the `bench` folder and execute:
+
 ```bash
 $ ./bench.sh
 ```
+
 Then, process the results using the `process_results` notebook.
 
 ## Usage
 
 Setting up a symbolic regression problem in _AlpineGP_ involves several key steps:
-1. Define the functions that return the **prediction** and the **fitness** 
+
+1. Define the functions that return the **prediction** and the **fitness**
    associated to an individual. These functions **must** have at least the following
    arguments in the first three positions:
    - the list of trees to be evaluated by the current worker;
@@ -79,9 +83,11 @@ Setting up a symbolic regression problem in _AlpineGP_ involves several key step
      argument **must** be `X`.
 
 Additionally, the fourth argument of the **fitness** function **must** be the dataset
-labels, called `y`. For unsupervised problems, `None` can be passed for the labels to
-the `fit` method of the regressor. Any additional arguments can be set using
-the `common_data` argument of the `GPSymbolicRegressor` object (see below). 
+labels, called `y`. For unsupervised problems, `None` must be passed as a `y` argument
+to the fit method of the regressor, while the `y` argument of the fitness function must
+be dropped. Any additional arguments can be set using
+the `common_data` argument of the `GPSymbolicRegressor` object (see below).
+
 ```python
 def predict(individuals_batch, toolbox, X):
 
@@ -98,10 +104,10 @@ def fitness(individuals_batch, toolbox, X, y):
     fitnesses = [None]*len(trees)
 
     for i, tree in enumerate(individuals_batch):
-        
+
         callable, _ = util.compile_individual_with_consts(tree, toolbox)
         # MSE = ...
-        
+
         # each fitness MUST be a tuple (required by DEAP)
         fitnesses[i] = (MSE,)
 
@@ -115,6 +121,7 @@ SR run on a given dataset.
 2. Set up and solve the symbolic regression problem. The configuration of the
    `GPSymbolicRegressor` object can be specified via the arguments of its constructor
    (see the API docs), or loaded from a YAML file.
+
 ```python
 yamlfile = "simple_sr.yaml"
 filename = os.path.join(os.path.dirname(__file__), yamlfile)
@@ -140,7 +147,7 @@ common_data = {"penalty": penalty}
 gpsr = GPSymbolicRegressor(
     pset_config=pset,
     fitness=fitness,
-    error_metric=score,
+    score_func=score,
     predict_func=predict,
     common_data=common_data,
     print_log=True,
@@ -162,6 +169,7 @@ Complete example scripts can be found in the `examples` directory. In particular
 regression problem.
 
 ## Citing
+
 ```
 @article{Manti_2024,
     doi = {10.1088/2632-2153/ad1af2},
