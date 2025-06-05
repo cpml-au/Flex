@@ -15,8 +15,10 @@ gp:
   select:
     # fun: self.tournament_with_elitism
     # kargs: "{'tournsize': 2, 'stochastic_tourn': { 'enabled': True, 'prob': [0.7, 0.3] }}"
-    fun: tools.selection.selStochasticUniversalSampling
-    kargs: "{'k': self.num_individuals}"
+    # fun: tools.selection.selStochasticUniversalSampling
+    # kargs: "{'k': self.num_individuals}"
+    fun: random.sample
+    kargs: "{}"
   mutate:
     fun: gp.mixedMutate
     kargs: "{'expr': self.toolbox.expr_mut, 'pset': self.pset, 'prob': [0.7, 0.2, 0.1]}" # string is important
