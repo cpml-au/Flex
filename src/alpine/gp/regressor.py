@@ -66,6 +66,11 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             individuals of each generation. It takes the population/batch of
             individuals and the list containing all the values of the attributes
             returned by the fitness evaluation function.
+        max_calls: Maximum number of tasks a Ray worker can execute before being
+            terminated and restarted. The default is 0, which means infinite number
+            of tasks.
+        custom_logger: A user-defined callable that handles logging or printing
+            messages. It accepts the list of best individuals of each generation.
     """
 
     def __init__(
@@ -108,8 +113,10 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         save_best_individual: bool = False,
         save_train_fit_history: bool = False,
         output_path: str | None = None,
-        batch_size=1,
-        num_cpus=1,
+        batch_size: int = 1,
+        num_cpus: int = 1,
+        max_calls: int = 0,
+        custom_logger: Callable = lambda _: None,
     ):
         super().__init__()
         self.pset_config = pset_config
@@ -161,6 +168,8 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
 
         self.seed_str = seed_str
         self.num_cpus = num_cpus
+        self.max_calls = max_calls
+        self.custom_logger = custom_logger
 
     def __sklearn_tags__(self):
         # since we are allowing cases in which y=None
@@ -367,7 +376,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         # networkx.nx_agraph.write_dot(graph, "genealogy.dot")
 
     def __get_remote(self, f):
-        return (ray.remote(f)).options(num_cpus=self.num_cpus).remote
+        return ray.remote(num_cpus=self.num_cpus, max_calls=self.max_calls)(f).remote
 
     def __register_fitness_func(self, toolbox):
         store = self.__data_store
@@ -613,7 +622,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
                     ind.fitness.values = fit
 
         if self.validate:
-            print("Using validation dataset.")
+            print("Using validation dataset.", flush=True)
 
         print("DONE.", flush=True)
 
@@ -636,7 +645,8 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             if self.print_log:
                 print("Best individuals of this generation:", flush=True)
                 for i in range(self.num_best_inds_str):
-                    print(str(best_inds[i]))
+                    print(str(best_inds[i]), flush=True)
+                self.custom_logger(best_inds)
 
             # Update history of best fitness and best validation error
             self.__train_fit_history = self.__logbook.chapters["fitness"].select("min")
@@ -668,7 +678,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             self.__best = best_inds[0]
 
             if self.__best.fitness.values[0] <= 1e-15:
-                print("EARLY STOPPING.")
+                print("EARLY STOPPING.", flush=True)
                 break
 
         self.__plot_initialized = False
@@ -677,10 +687,16 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         self.__last_gen = self.__cgen
 
         print(f"The best individual is {self.__best}", flush=True)
-        print(f"The best fitness on the training set is {self.__train_fit_history[-1]}")
+        print(
+            f"The best fitness on the training set is {self.__train_fit_history[-1]}",
+            flush=True,
+        )
 
         if self.validate:
-            print(f"The best fitness on the validation set is {self.min_valerr}")
+            print(
+                f"The best fitness on the validation set is {self.min_valerr}",
+                flush=True,
+            )
 
         if self.plot_best_genealogy:
             self.__plot_genealogy(self.__best)
@@ -690,11 +706,11 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
 
         if self.save_best_individual and self.output_path is not None:
             self.__save_best_individual(self.output_path)
-            print("String of the best individual saved to disk.")
+            print("String of the best individual saved to disk.", flush=True)
 
         if self.save_train_fit_history and self.output_path is not None:
             self.__save_train_fit_history(self.output_path)
-            print("Training fitness history saved to disk.")
+            print("Training fitness history saved to disk.", flush=True)
 
         # NOTE: ray.shutdown should be manually called by the user
 
