@@ -71,6 +71,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             of tasks.
         custom_logger: A user-defined callable that handles logging or printing
             messages. It accepts the list of best individuals of each generation.
+            The default is None.
     """
 
     def __init__(
@@ -116,7 +117,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         batch_size: int = 1,
         num_cpus: int = 1,
         max_calls: int = 0,
-        custom_logger: Callable = lambda _: None,
+        custom_logger: Callable = None,
     ):
         super().__init__()
         self.pset_config = pset_config
@@ -646,7 +647,8 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
                 print("Best individuals of this generation:", flush=True)
                 for i in range(self.num_best_inds_str):
                     print(str(best_inds[i]), flush=True)
-                self.custom_logger(best_inds)
+                if self.custom_logger is not None:
+                    self.custom_logger(best_inds)
 
             # Update history of best fitness and best validation error
             self.__train_fit_history = self.__logbook.chapters["fitness"].select("min")
