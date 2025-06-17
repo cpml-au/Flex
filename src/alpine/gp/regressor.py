@@ -18,8 +18,10 @@ from alpine.gp.util import (
     std_func,
     fitness_value,
 )
+from alpine.gp.primitives import stringify_for_sympy
 from sklearn.base import BaseEstimator, RegressorMixin
 from sklearn.utils.validation import check_is_fitted, validate_data
+from sympy.parsing.sympy_parser import parse_expr
 
 
 # reducing the number of threads launched by fitness evaluations
@@ -118,6 +120,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         num_cpus: int = 1,
         max_calls: int = 0,
         custom_logger: Callable = None,
+        sympy_output: bool = False,
     ):
         super().__init__()
         self.pset_config = pset_config
@@ -171,6 +174,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         self.num_cpus = num_cpus
         self.max_calls = max_calls
         self.custom_logger = custom_logger
+        self.sympy_output = sympy_output
 
     def __sklearn_tags__(self):
         # since we are allowing cases in which y=None
@@ -688,7 +692,18 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
 
         self.__last_gen = self.__cgen
 
-        print(f"The best individual is {self.__best}", flush=True)
+        if hasattr(self.__best, "consts"):
+            self.__substitute_constants(toolbox)
+
+        # define sympy representation of the best individual
+        if self.sympy_output:
+            self.__best_sympy = parse_expr(stringify_for_sympy(self.__best))
+            best_str = self.__best_sympy
+        else:
+            best_str = self.__best
+
+        print(f"The best individual is {best_str}", flush=True)
+
         print(
             f"The best fitness on the training set is {self.__train_fit_history[-1]}",
             flush=True,
@@ -765,3 +780,21 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             np.save(join(output_path, "best_sol_test_" + str(i) + ".npy"), sol)
 
         print("Best individual solution evaluated over the test set saved to disk.")
+
+    def __substitute_constants(self, toolbox: base.Toolbox):
+        """Substitute placeholders for constants in the best individual
+
+        Args:
+            toolbox: the toolbox object.
+        """
+        const_idx = 0
+        ind_clone = toolbox.clone(self.__best)
+        for i, node in enumerate(ind_clone):
+            if isinstance(node, gp.Terminal) and node.name[0:3] != "ARG":
+                if node.name == "c":
+                    const_value = self.__best.consts[const_idx]
+                    new_node_name = str(const_value)
+                    print(new_node_name)
+                    ind_clone[i] = gp.Terminal(new_node_name, const_value, float)
+                    const_idx += 1
+        self.__best = ind_clone

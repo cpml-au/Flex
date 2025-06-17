@@ -30,3 +30,4 @@ dependencies:
       - pmlb
       - optuna
       - optuna-integration
+      - sympy
