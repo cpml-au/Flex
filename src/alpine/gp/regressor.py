@@ -17,6 +17,7 @@ from alpine.gp.util import (
     avg_func,
     std_func,
     fitness_value,
+    substitute_constants,
 )
 from alpine.gp.primitives import stringify_for_sympy
 from sklearn.base import BaseEstimator, RegressorMixin
@@ -74,6 +75,8 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         custom_logger: A user-defined callable that handles logging or printing
             messages. It accepts the list of best individuals of each generation.
             The default is None.
+        sympy_converter: a dictionary of convertion rules to map a given set of
+            primitives to sympy primitives. The default is None.
     """
 
     def __init__(
@@ -120,7 +123,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         num_cpus: int = 1,
         max_calls: int = 0,
         custom_logger: Callable = None,
-        sympy_output: bool = False,
+        sympy_converter: Dict = None,
     ):
         super().__init__()
         self.pset_config = pset_config
@@ -174,7 +177,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         self.num_cpus = num_cpus
         self.max_calls = max_calls
         self.custom_logger = custom_logger
-        self.sympy_output = sympy_output
+        self.sympy_converter = sympy_converter
 
     def __sklearn_tags__(self):
         # since we are allowing cases in which y=None
@@ -693,11 +696,13 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         self.__last_gen = self.__cgen
 
         if hasattr(self.__best, "consts"):
-            self.__substitute_constants(toolbox)
+            self.__best = substitute_constants(self.__best, toolbox)
 
         # define sympy representation of the best individual
-        if self.sympy_output:
-            self.__best_sympy = parse_expr(stringify_for_sympy(self.__best))
+        if self.sympy_converter is not None:
+            self.__best_sympy = parse_expr(
+                stringify_for_sympy(self.__best, self.sympy_converter)
+            )
             best_str = self.__best_sympy
         else:
             best_str = self.__best
@@ -780,21 +785,3 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             np.save(join(output_path, "best_sol_test_" + str(i) + ".npy"), sol)
 
         print("Best individual solution evaluated over the test set saved to disk.")
-
-    def __substitute_constants(self, toolbox: base.Toolbox):
-        """Substitute placeholders for constants in the best individual
-
-        Args:
-            toolbox: the toolbox object.
-        """
-        const_idx = 0
-        ind_clone = toolbox.clone(self.__best)
-        for i, node in enumerate(ind_clone):
-            if isinstance(node, gp.Terminal) and node.name[0:3] != "ARG":
-                if node.name == "c":
-                    const_value = self.__best.consts[const_idx]
-                    new_node_name = str(const_value)
-                    print(new_node_name)
-                    ind_clone[i] = gp.Terminal(new_node_name, const_value, float)
-                    const_idx += 1
-        self.__best = ind_clone

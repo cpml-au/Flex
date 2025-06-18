@@ -18,3 +18,13 @@ numpy_primitives = {
         lambda x, y: np.divide(x, np.sqrt(1 + y**2)), [float, float], float
     ),
 }
+
+converter_numpy_primitives = {
+    "sub": lambda *args_: "Add({}, Mul(-1,{}))".format(*args_),
+    "div": lambda *args_: "Mul({}, Pow({}, -1))".format(*args_),
+    "mul": lambda *args_: "Mul({},{})".format(*args_),
+    "add": lambda *args_: "Add({},{})".format(*args_),
+    "pow": lambda *args_: "Pow({}, {})".format(*args_),
+    "square": lambda *args_: "Pow({}, 2)".format(*args_),
+    "aq": lambda *args_: "Mul({}, Pow(Add(1, Pow({}, 2), -1))".format(*args_),
+}

@@ -1,7 +1,6 @@
-from deap.gp import PrimitiveSetTyped
+from deap.gp import PrimitiveSetTyped, Primitive, PrimitiveTree
 from typing import List, Dict, Callable, Tuple
 import importlib
-import copy
 
 
 def switch_category(categories: Tuple, category: str):
@@ -150,39 +149,40 @@ def add_primitives_to_pset(
                     pset.addPrimitive(op, in_types, out_type, name=typed_primitive)
 
 
-def convert_inverse_prim(prim, args):
-    """
-    Convert inverse prims according to:
-    [Dd]iv(a,b) -> Mul[a, 1/b]
-    [Ss]ub(a,b) -> Add[a, -b]
-    We achieve this by overwriting the corresponding format method
-    of the sub and div prim.
-    """
-    prim = copy.copy(prim)
+def convert_deap_into_sympy_primitives(prim: Primitive, converter: Dict, args: Tuple):
+    """Convert a deap scalar primitive into a sympy primitive.
 
-    converter = {
-        "sub": lambda *args_: "Add({}, Mul(-1,{}))".format(*args_),
-        "div": lambda *args_: "Mul({}, Pow({}, -1))".format(*args_),
-        "mul": lambda *args_: "Mul({},{})".format(*args_),
-        "add": lambda *args_: "Add({},{})".format(*args_),
-        "pow": lambda *args_: "Pow({}, {})".format(*args_),
-        "square": lambda *args_: "Pow({}, 2)".format(*args_),
-        "aq": lambda *args_: "Mul({}, Pow(Add(1, Pow({}, 2), -1))".format(*args_),
-    }
+    Args:
+        prim: the primitive.
+        converter: a dictionary of convertion rules.
+        args: args of the primitive.
+
+    Returns:
+        the converted primitive.
+
+    """
     prim_formatter = converter.get(prim.name, prim.format)
 
     return prim_formatter(*args)
 
 
-def stringify_for_sympy(f):
-    """Return the expression in a human readable string."""
+def stringify_for_sympy(f: PrimitiveTree, converter: Dict) -> str:
+    """Return the expression in a string that can be parsed into a sympy object.
+
+    Args:
+        f: the individual tree (DEAP format)
+        converter: a dictionary of convertion rules.
+
+    Returns:
+        the converted individual.
+    """
     string = ""
     stack = []
     for node in f:
         stack.append((node, []))
         while len(stack[-1][1]) == stack[-1][0].arity:
             prim, args = stack.pop()
-            string = convert_inverse_prim(prim, args)
+            string = convert_deap_into_sympy_primitives(prim, converter, args)
             if len(stack) == 0:
                 break  # If stack is empty, all nodes should have been seen
             stack[-1][1].append(string)

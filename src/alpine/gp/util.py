@@ -4,7 +4,7 @@ from importlib import import_module
 from itertools import chain
 import ray
 import numpy as np
-from deap import gp
+from deap import gp, base
 
 
 def add_primitives_to_pset_from_dict(pset, primitives_dict):
@@ -154,3 +154,25 @@ def min_func(values):
 
 def max_func(values):
     return np.around(np.max(values), 4)
+
+
+def substitute_constants(
+    ind: gp.PrimitiveTree, toolbox: base.Toolbox
+) -> gp.PrimitiveTree:
+    """Substitute placeholders for constants in a given individual.
+
+    Args:
+        ind: the individual tree.
+        toolbox: the toolbox object.
+    """
+    const_idx = 0
+    ind_clone = toolbox.clone(ind)
+    for i, node in enumerate(ind_clone):
+        if isinstance(node, gp.Terminal) and node.name[0:3] != "ARG":
+            if node.name == "c":
+                const_value = ind.consts[const_idx]
+                new_node_name = str(const_value)
+                ind_clone[i] = gp.Terminal(new_node_name, const_value, float)
+                const_idx += 1
+    ind = ind_clone
+    return ind
