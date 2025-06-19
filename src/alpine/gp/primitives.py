@@ -149,41 +149,41 @@ def add_primitives_to_pset(
                     pset.addPrimitive(op, in_types, out_type, name=typed_primitive)
 
 
-def convert_deap_into_sympy_primitives(prim: Primitive, converter: Dict, args: Tuple):
+def deap_primitive_to_sympy_expr(prim: Primitive, conversion_rules: Dict, args: Tuple):
     """Convert a deap scalar primitive into a sympy primitive.
 
     Args:
         prim: the primitive.
-        converter: a dictionary of convertion rules.
+        conversion_rules: a dictionary of conversion rules.
         args: args of the primitive.
 
     Returns:
         the converted primitive.
 
     """
-    prim_formatter = converter.get(prim.name, prim.format)
+    prim_formatter = conversion_rules.get(prim.name, prim.format)
 
     return prim_formatter(*args)
 
 
-def stringify_for_sympy(f: PrimitiveTree, converter: Dict) -> str:
-    """Return the expression in a string that can be parsed into a sympy object.
+def stringify_for_sympy(f: PrimitiveTree, conversion_rules: Dict) -> str:
+    """Returns a sympy-compatible expression.
 
     Args:
         f: the individual tree (DEAP format)
-        converter: a dictionary of convertion rules.
+        conversion_rules: a dictionary of conversion rules.
 
     Returns:
-        the converted individual.
+        the sympy-compatible expression.
     """
-    string = ""
+    prim_string = ""
     stack = []
     for node in f:
         stack.append((node, []))
         while len(stack[-1][1]) == stack[-1][0].arity:
             prim, args = stack.pop()
-            string = convert_deap_into_sympy_primitives(prim, converter, args)
+            prim_string = deap_primitive_to_sympy_expr(prim, conversion_rules, args)
             if len(stack) == 0:
                 break  # If stack is empty, all nodes should have been seen
-            stack[-1][1].append(string)
-    return string
+            stack[-1][1].append(prim_string)
+    return prim_string

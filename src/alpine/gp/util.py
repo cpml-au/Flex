@@ -122,18 +122,44 @@ def compile_individuals(toolbox, individuals_str_batch):
     return [toolbox.compile(expr=ind) for ind in individuals_str_batch]
 
 
-def compile_individual_with_consts(tree, toolbox, special_term_name="c"):
+def replace_constants(tree, toolbox, special_term_name, replace_fn):
     const_idx = 0
     tree_clone = toolbox.clone(tree)
     for i, node in enumerate(tree_clone):
-        if isinstance(node, gp.Terminal) and node.name[0:3] != "ARG":
+        if isinstance(node, gp.Terminal) and not node.name.startswith("ARG"):
             if node.name == special_term_name:
-                new_node_name = special_term_name + "[" + str(const_idx) + "]"
-                tree_clone[i] = gp.Terminal(new_node_name, True, float)
+                tree_clone[i] = replace_fn(tree, const_idx)
                 const_idx += 1
+    return tree_clone, const_idx
 
-    individual = toolbox.compile(expr=tree_clone, extra_args=[special_term_name])
+
+def compile_individual_with_consts(tree, toolbox, special_term_name="c"):
+    def replace_fn(_, idx):
+        return gp.Terminal(f"{special_term_name}[{idx}]", True, float)
+
+    new_tree, const_idx = replace_constants(
+        tree, toolbox, special_term_name, replace_fn
+    )
+    individual = toolbox.compile(expr=new_tree, extra_args=[special_term_name])
     return individual, const_idx
+
+
+def replace_constants_with_values(
+    tree: gp.PrimitiveTree, toolbox: base.Toolbox, special_term_name: str = "c"
+) -> gp.PrimitiveTree:
+    """Replace constants placeholders with their values.
+
+    Args:
+        tree: the individual tree.
+        toolbox: the toolbox object.
+        special_term_name: name of the constant placeholder.
+    """
+
+    def replace_fn(tree, idx):
+        return gp.Terminal(str(tree.consts[idx]), tree.consts[idx], float)
+
+    new_tree, _ = replace_constants(tree, toolbox, special_term_name, replace_fn)
+    return new_tree
 
 
 def fitness_value(ind):
@@ -154,25 +180,3 @@ def min_func(values):
 
 def max_func(values):
     return np.around(np.max(values), 4)
-
-
-def substitute_constants(
-    ind: gp.PrimitiveTree, toolbox: base.Toolbox
-) -> gp.PrimitiveTree:
-    """Substitute placeholders for constants in a given individual.
-
-    Args:
-        ind: the individual tree.
-        toolbox: the toolbox object.
-    """
-    const_idx = 0
-    ind_clone = toolbox.clone(ind)
-    for i, node in enumerate(ind_clone):
-        if isinstance(node, gp.Terminal) and node.name[0:3] != "ARG":
-            if node.name == "c":
-                const_value = ind.consts[const_idx]
-                new_node_name = str(const_value)
-                ind_clone[i] = gp.Terminal(new_node_name, const_value, float)
-                const_idx += 1
-    ind = ind_clone
-    return ind

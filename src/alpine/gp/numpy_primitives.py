@@ -19,7 +19,7 @@ numpy_primitives = {
     ),
 }
 
-converter_numpy_primitives = {
+conversion_rules = {
     "sub": lambda *args_: "Add({}, Mul(-1,{}))".format(*args_),
     "div": lambda *args_: "Mul({}, Pow({}, -1))".format(*args_),
     "mul": lambda *args_: "Mul({},{})".format(*args_),

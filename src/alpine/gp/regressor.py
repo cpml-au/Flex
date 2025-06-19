@@ -17,7 +17,7 @@ from alpine.gp.util import (
     avg_func,
     std_func,
     fitness_value,
-    substitute_constants,
+    replace_constants_with_values,
 )
 from alpine.gp.primitives import stringify_for_sympy
 from sklearn.base import BaseEstimator, RegressorMixin
@@ -75,7 +75,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         custom_logger: A user-defined callable that handles logging or printing
             messages. It accepts the list of best individuals of each generation.
             The default is None.
-        sympy_converter: a dictionary of convertion rules to map a given set of
+        sympy_conversion_rules: a dictionary of convertion rules to map a given set of
             primitives to sympy primitives. The default is None.
     """
 
@@ -123,7 +123,8 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         num_cpus: int = 1,
         max_calls: int = 0,
         custom_logger: Callable = None,
-        sympy_converter: Dict = None,
+        special_term_name: str = "c",
+        sympy_conversion_rules: Dict = None,
     ):
         super().__init__()
         self.pset_config = pset_config
@@ -177,7 +178,8 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         self.num_cpus = num_cpus
         self.max_calls = max_calls
         self.custom_logger = custom_logger
-        self.sympy_converter = sympy_converter
+        self.special_term_name = special_term_name
+        self.sympy_conversion_rules = sympy_conversion_rules
 
     def __sklearn_tags__(self):
         # since we are allowing cases in which y=None
@@ -696,12 +698,14 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         self.__last_gen = self.__cgen
 
         if hasattr(self.__best, "consts"):
-            self.__best = substitute_constants(self.__best, toolbox)
+            self.__best = replace_constants_with_values(
+                self.__best, toolbox, self.special_term_name
+            )
 
         # define sympy representation of the best individual
-        if self.sympy_converter is not None:
+        if self.sympy_conversion_rules is not None:
             self.__best_sympy = parse_expr(
-                stringify_for_sympy(self.__best, self.sympy_converter)
+                stringify_for_sympy(self.__best, self.sympy_conversion_rules)
             )
             best_str = self.__best_sympy
         else:
