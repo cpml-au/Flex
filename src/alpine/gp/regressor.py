@@ -10,15 +10,7 @@ from alpine.data import Dataset
 import os
 import ray
 import random
-from alpine.gp.util import (
-    mapper,
-    max_func,
-    min_func,
-    avg_func,
-    std_func,
-    fitness_value,
-    replace_constants_with_values,
-)
+from alpine.gp.util import mapper, max_func, min_func, avg_func, std_func, fitness_value
 from alpine.gp.primitives import stringify_for_sympy
 from sklearn.base import BaseEstimator, RegressorMixin
 from sklearn.utils.validation import check_is_fitted, validate_data
@@ -697,15 +689,12 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
 
         self.__last_gen = self.__cgen
 
-        if hasattr(self.__best, "consts"):
-            self.__best = replace_constants_with_values(
-                self.__best, toolbox, self.special_term_name
-            )
-
         # define sympy representation of the best individual
         if self.sympy_conversion_rules is not None:
             self.__best_sympy = parse_expr(
-                stringify_for_sympy(self.__best, self.sympy_conversion_rules)
+                stringify_for_sympy(
+                    self.__best, self.sympy_conversion_rules, self.special_term_name
+                )
             )
             best_str = self.__best_sympy
         else:
