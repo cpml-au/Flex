@@ -150,7 +150,8 @@ def add_primitives_to_pset(
 
 
 def deap_primitive_to_sympy_expr(prim: Primitive, conversion_rules: Dict, args: Tuple):
-    """Convert a deap scalar primitive into a sympy primitive.
+    """Convert a DEAP primitive and its arguments into the corresponding sympy
+        expression.
 
     Args:
         prim: the primitive.
@@ -158,7 +159,7 @@ def deap_primitive_to_sympy_expr(prim: Primitive, conversion_rules: Dict, args: 
         args: args of the primitive.
 
     Returns:
-        the converted primitive.
+        the sympy-compatible expression.
 
     """
     prim_formatter = conversion_rules.get(prim.name, prim.format)
@@ -179,7 +180,7 @@ def stringify_for_sympy(
     Returns:
         the sympy-compatible expression.
     """
-    prim_string = ""
+    expr = ""
     stack = []
     const_idx = 0
     for node in f:
@@ -188,12 +189,12 @@ def stringify_for_sympy(
             prim, args = stack.pop()
             if prim.name == special_term_name:
                 # substitute the c placeholder with the constant value
-                prim_string = f.consts[const_idx]
+                expr = f.consts[const_idx]
                 # update the constant index
                 const_idx += 1
             else:
-                prim_string = deap_primitive_to_sympy_expr(prim, conversion_rules, args)
+                expr = deap_primitive_to_sympy_expr(prim, conversion_rules, args)
             if len(stack) == 0:
                 break  # If stack is empty, all nodes should have been seen
-            stack[-1][1].append(prim_string)
-    return prim_string
+            stack[-1][1].append(expr)
+    return expr
