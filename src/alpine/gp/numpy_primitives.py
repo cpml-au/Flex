@@ -17,6 +17,7 @@ numpy_primitives = {
     "aq": PrimitiveParams(
         lambda x, y: np.divide(x, np.sqrt(1 + y**2)), [float, float], float
     ),
+    "tanh": PrimitiveParams(np.tanh, [float], float),
 }
 
 conversion_rules = {
