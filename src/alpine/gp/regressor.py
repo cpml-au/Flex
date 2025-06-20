@@ -757,7 +757,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
     def get_best_individual(self):
         return self.__best
 
-    def get_best_sympy_individual(self):
+    def get_best_individual_sympy(self):
         if self.sympy_conversion_rules is not None:
             return self.__best_sympy
 
