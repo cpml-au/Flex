@@ -90,7 +90,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         num_individuals: int = 10,
         generations: int = 1,
         num_islands: int = 1,
-        check_duplicates: bool = False,
+        remove_init_duplicates: bool = False,
         mig_freq: int = 10,
         mig_frac: float = 0.05,
         crossover_prob: float = 0.5,
@@ -169,7 +169,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
 
         self.seed_str = seed_str
         self.num_cpus = num_cpus
-        self.check_duplicates = check_duplicates
+        self.remove_init_duplicates = remove_init_duplicates
         self.max_calls = max_calls
         self.custom_logger = custom_logger
         self.special_term_name = special_term_name
@@ -590,8 +590,32 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
 
         return num_evals
 
-    def __eval_attributes(self):
-        pass
+    def __remove_duplicates(self, toolbox):
+        for i in range(self.num_islands):
+            while True:
+                fitnesses = toolbox.map(toolbox.evaluate_train, self.__pop[i])
+                if self.callback_func is not None:
+                    self.callback_func(self.__pop[i], fitnesses)
+                else:
+                    for ind, fit in zip(self.__pop[i], fitnesses):
+                        ind.fitness.values = fit
+                fitness_array = np.array(
+                    [ind.fitness.values[0] for ind in self.__pop[i]]
+                )
+                # Identify unique fitness indices
+                _, idx_unique = np.unique(fitness_array, return_index=True)
+                # Identify duplicate indices
+                dup_indices = np.setdiff1d(np.arange(len(fitnesses)), idx_unique)
+                # Identify indices with fitness above threshold
+                threshold_indices = np.where(fitness_array > 1e5)[0]
+                # Combine both types of bad indices
+                bad_indices = np.unique(
+                    np.concatenate([dup_indices, threshold_indices])
+                )
+                if len(bad_indices) == 0:
+                    break
+                for idx in bad_indices:
+                    self.__pop[i][idx] = toolbox.individual()
 
     def __run(self, toolbox):
         # Generate initial population
@@ -611,33 +635,9 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             print("Seeding population with individuals...", flush=True)
             self.__pop[0][: len(self.seed_ind)] = self.seed_ind
 
-        if self.check_duplicates:
+        if self.remove_init_duplicates:
             print("Removing duplicates from initial population(s)...", flush=True)
-            for i in range(self.num_islands):
-                while True:
-                    fitnesses = toolbox.map(toolbox.evaluate_train, self.__pop[i])
-                    if self.callback_func is not None:
-                        self.callback_func(self.__pop[i], fitnesses)
-                    else:
-                        for ind, fit in zip(self.__pop[i], fitnesses):
-                            ind.fitness.values = fit
-                    fitness_array = np.array(
-                        [ind.fitness.values[0] for ind in self.__pop[i]]
-                    )
-                    # Identify unique fitness indices
-                    _, idx_unique = np.unique(fitness_array, return_index=True)
-                    # Identify duplicate indices
-                    dup_indices = np.setdiff1d(np.arange(len(fitnesses)), idx_unique)
-                    # Identify indices with fitness above threshold
-                    threshold_indices = np.where(fitness_array > 1e5)[0]
-                    # Combine both types of bad indices
-                    bad_indices = np.unique(
-                        np.concatenate([dup_indices, threshold_indices])
-                    )
-                    if len(bad_indices) == 0:
-                        break
-                    for idx in bad_indices:
-                        self.__pop[i][idx] = toolbox.individual()
+            self.__remove_duplicates(toolbox)
             print("DONE.", flush=True)
 
         if self.preprocess_func is not None:
