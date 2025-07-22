@@ -2,7 +2,8 @@ import os
 from dctkit import config
 from deap import gp
 from alpine.gp.regressor import GPSymbolicRegressor
-from alpine.gp import util
+from alpine.gp.util import load_config_data, compile_individuals
+from alpine.gp.primitives import add_primitives_to_pset_from_dict
 import jax.numpy as jnp
 import ray
 
@@ -37,7 +38,7 @@ def eval_MSE_sol(individual, X, y):
 
 def predict(individuals_str, toolbox, X):
 
-    callables = util.compile_individuals(toolbox, individuals_str)
+    callables = compile_individuals(toolbox, individuals_str)
 
     u = [None] * len(individuals_str)
 
@@ -49,7 +50,7 @@ def predict(individuals_str, toolbox, X):
 
 def score(individuals_str, toolbox, X, y):
 
-    callables = util.compile_individuals(toolbox, individuals_str)
+    callables = compile_individuals(toolbox, individuals_str)
 
     MSE = [None] * len(individuals_str)
 
@@ -60,7 +61,7 @@ def score(individuals_str, toolbox, X, y):
 
 
 def fitness(individuals_str, toolbox, X, y):
-    callables = util.compile_individuals(toolbox, individuals_str)
+    callables = compile_individuals(toolbox, individuals_str)
 
     fitnesses = [None] * len(individuals_str)
     for i, ind in enumerate(callables):
@@ -75,7 +76,7 @@ def test_basic_sr(set_test_dir):
     yamlfile = "test_basic_sr.yaml"
     filename = os.path.join(os.path.dirname(__file__), yamlfile)
 
-    regressor_params, config_file_data = util.load_config_data(filename)
+    regressor_params, config_file_data = load_config_data(filename)
 
     pset = gp.PrimitiveSetTyped(
         "MAIN",
@@ -87,9 +88,7 @@ def test_basic_sr(set_test_dir):
     pset.addPrimitive(jnp.add, [float, float], float, "AddF")
     pset.renameArguments(ARG0="x")
 
-    pset = util.add_primitives_to_pset_from_dict(
-        pset, config_file_data["gp"]["primitives"]
-    )
+    pset = add_primitives_to_pset_from_dict(pset, config_file_data["gp"]["primitives"])
 
     common_data = {}
     seed = [

@@ -11,7 +11,7 @@ import os
 import ray
 import random
 from alpine.gp.util import mapper, max_func, min_func, avg_func, std_func, fitness_value
-from alpine.gp.primitives import stringify_for_sympy
+from alpine.gp.sympy import stringify_for_sympy
 from sklearn.base import BaseEstimator, RegressorMixin
 from sklearn.utils.validation import check_is_fitted, validate_data
 from sympy.parsing.sympy_parser import parse_expr

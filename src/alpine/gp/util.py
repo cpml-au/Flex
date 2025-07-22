@@ -1,29 +1,8 @@
 import yaml
-from .primitives import add_primitives_to_pset
-from importlib import import_module
 from itertools import chain
 import ray
 import numpy as np
 from deap import gp
-
-
-def add_primitives_to_pset_from_dict(pset, primitives_dict):
-    primitives_collection = dict()
-    imports = primitives_dict["imports"].items()
-
-    for module_name, function_names in imports:
-        module = import_module(module_name)
-        for function_name in function_names:
-            primitive = getattr(module, function_name)
-            primitives_collection = primitives_collection | primitive
-
-    add_primitives_to_pset(
-        pset,
-        primitives_dict["used"],
-        primitives_collection,
-    )
-
-    return pset
 
 
 def load_config_data(filename):
