@@ -5,7 +5,12 @@ import numpy as np
 import ray
 import warnings
 import re
-from alpine.gp import util
+from alpine.gp.util import (
+    detect_nested_trigonometric_functions,
+    compile_individuals,
+    load_config_data,
+)
+from alpine.gp.primitives import add_primitives_to_pset_from_dict
 
 
 # Ground truth
@@ -18,7 +23,7 @@ def check_trig_fn(ind):
 
 
 def check_nested_trig_fn(ind):
-    return util.detect_nested_trigonometric_functions(str(ind))
+    return detect_nested_trigonometric_functions(str(ind))
 
 
 def get_features_batch(
@@ -47,7 +52,7 @@ def eval_MSE_sol(individual, X, y):
 
 def predict(individuals_batch, toolbox, X, penalty):
 
-    callables = util.compile_individuals(toolbox, individuals_batch)
+    callables = compile_individuals(toolbox, individuals_batch)
 
     u = [None] * len(individuals_batch)
 
@@ -59,7 +64,7 @@ def predict(individuals_batch, toolbox, X, penalty):
 
 def score(individuals_batch, toolbox, X, y, penalty):
 
-    callables = util.compile_individuals(toolbox, individuals_batch)
+    callables = compile_individuals(toolbox, individuals_batch)
 
     MSE = [None] * len(individuals_batch)
 
@@ -70,7 +75,7 @@ def score(individuals_batch, toolbox, X, y, penalty):
 
 
 def fitness(individuals_batch, toolbox, X, y, penalty):
-    callables = util.compile_individuals(toolbox, individuals_batch)
+    callables = compile_individuals(toolbox, individuals_batch)
 
     individ_length, nested_trigs, num_trigs = get_features_batch(individuals_batch)
 
@@ -94,7 +99,7 @@ def main():
     yamlfile = "simple_sr.yaml"
     filename = os.path.join(os.path.dirname(__file__), yamlfile)
 
-    regressor_params, config_file_data = util.load_config_data(filename)
+    regressor_params, config_file_data = load_config_data(filename)
 
     pset = gp.PrimitiveSetTyped(
         "MAIN",
@@ -105,9 +110,7 @@ def main():
     )
     pset.renameArguments(ARG0="x")
 
-    pset = util.add_primitives_to_pset_from_dict(
-        pset, config_file_data["gp"]["primitives"]
-    )
+    pset = add_primitives_to_pset_from_dict(pset, config_file_data["gp"]["primitives"])
 
     penalty = config_file_data["gp"]["penalty"]
     common_data = {"penalty": penalty}

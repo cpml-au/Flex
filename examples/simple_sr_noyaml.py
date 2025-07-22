@@ -4,7 +4,11 @@ import numpy as np
 import ray
 import warnings
 import re
-from alpine.gp import util
+from alpine.gp.util import (
+    detect_nested_trigonometric_functions,
+    compile_individuals,
+)
+from alpine.gp.primitives import add_primitives_to_pset_from_dict
 
 
 # Ground truth
@@ -17,7 +21,7 @@ def check_trig_fn(ind):
 
 
 def check_nested_trig_fn(ind):
-    return util.detect_nested_trigonometric_functions(str(ind))
+    return detect_nested_trigonometric_functions(str(ind))
 
 
 def get_features_batch(
@@ -46,7 +50,7 @@ def eval_MSE_sol(individual, X, y):
 
 def predict(individuals_str, toolbox, X, penalty):
 
-    callables = util.compile_individuals(toolbox, individuals_str)
+    callables = compile_individuals(toolbox, individuals_str)
 
     u = [None] * len(individuals_str)
 
@@ -58,7 +62,7 @@ def predict(individuals_str, toolbox, X, penalty):
 
 def score(individuals_str, toolbox, X, y, penalty):
 
-    callables = util.compile_individuals(toolbox, individuals_str)
+    callables = compile_individuals(toolbox, individuals_str)
 
     MSE = [None] * len(individuals_str)
 
@@ -69,7 +73,7 @@ def score(individuals_str, toolbox, X, y, penalty):
 
 
 def fitness(individuals_str, toolbox, X, y, penalty):
-    callables = util.compile_individuals(toolbox, individuals_str)
+    callables = compile_individuals(toolbox, individuals_str)
 
     individ_length, nested_trigs, num_trigs = get_features_batch(individuals_str)
 
@@ -114,7 +118,7 @@ def main():
         ],
     }
 
-    pset = util.add_primitives_to_pset_from_dict(pset, primitives)
+    pset = add_primitives_to_pset_from_dict(pset, primitives)
 
     penalty = {"reg_param": 0.0}
     common_data = {"penalty": penalty}
