@@ -252,6 +252,13 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             ]
         return toolbox, pset
 
+    def __init_data_store(self):
+        self.__data_store = dict()
+
+        if self.common_data is not None:
+            # FIXME: does everything work when the functions do not have common args?
+            self.__store_fit_score_common_args(self.common_data)
+
     def __store_fit_score_common_args(self, data: Dict):
         """Store names and values of the arguments that are in common between
         the fitness and the error metric functions in the common object space.
@@ -291,7 +298,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
 
         return fetched_data
 
-    def __init_logbook(self):
+    def __init_stats_log(self):
         # Initialize logbook to collect statistics
         self.__logbook = tools.Logbook()
         # Headers of fields to be printed during log
@@ -302,6 +309,22 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             self.__logbook.header = "gen", "evals", "fitness", "size"
         self.__logbook.chapters["fitness"].header = "min", "avg", "max", "std"
         self.__logbook.chapters["size"].header = "min", "avg", "max", "std"
+
+        # Initialize variables for statistics
+        self.__stats_fit = tools.Statistics(fitness_value)
+        self.__stats_size = tools.Statistics(len)
+        self.__mstats = tools.MultiStatistics(
+            fitness=self.__stats_fit, size=self.__stats_size
+        )
+        self.__mstats.register("avg", avg_func)
+        self.__mstats.register("std", std_func)
+        self.__mstats.register("min", min_func)
+        self.__mstats.register("max", max_func)
+
+        self.__train_fit_history = []
+
+        # Create history object to build the genealogy tree
+        self.__history = tools.History()
 
     def __compute_valid_stats(self, pop, toolbox):
         best = tools.selBest(pop, k=1)
@@ -427,9 +450,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
 
             toolbox.register("map", base_mapper, toolbox=toolbox)
 
-    # @_fit_context(prefer_skip_nested_validation=True)
-    def fit(self, X, y=None, X_val=None, y_val=None):
-        """Fits the training data using GP-based symbolic regression."""
+    def __prepare_fit(self, X, y, X_val, y_val):
         validated_data = validate_data(
             self,
             X,
@@ -447,52 +468,41 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             X, y = validated_data
             train_data = {"X": X, "y": y}
 
+        if self.validate and X_val is not None:
+            val_data = {"X": X_val, "y": y_val}
+            datasets = {"train": train_data, "val": val_data}
+        else:
+            datasets = {"train": train_data}
+
         # config individual creator and toolbox
-        toolbox, pset = self.__creator_toolbox_pset_config()
+        toolbox, _ = self.__creator_toolbox_pset_config()
 
-        self.__data_store = dict()
+        self.__init_data_store()
 
-        if self.common_data is not None:
-            # FIXME: does everything work when the functions do not have common args?
-            self.__store_fit_score_common_args(self.common_data)
+        self.__store_datasets(datasets)
 
-        # Initialize variables for statistics
-        self.__stats_fit = tools.Statistics(fitness_value)
-        self.__stats_size = tools.Statistics(len)
-        self.__mstats = tools.MultiStatistics(
-            fitness=self.__stats_fit, size=self.__stats_size
-        )
-        self.__mstats.register("avg", avg_func)
-        self.__mstats.register("std", std_func)
-        self.__mstats.register("min", min_func)
-        self.__mstats.register("max", max_func)
-
-        self.__init_logbook()
-
-        self.__train_fit_history = []
-
-        # Create history object to build the genealogy tree
-        self.__history = tools.History()
+        self.__init_stats_log()
 
         if self.plot_best_genealogy:
             # Decorators for history
             toolbox.decorate("mate", self.__history.decorator)
             toolbox.decorate("mutate", self.__history.decorator)
 
-        self.__register_map(toolbox)
-
         self.__plot_initialized = False
         self.__fig_id = 0
 
-        if self.validate and X_val is not None:
-            val_data = {"X": X_val, "y": y_val}
-            datasets = {"train": train_data, "val": val_data}
-        else:
-            datasets = {"train": train_data}
-        self.__store_datasets(datasets)
+        # register functions for fitness evaluation (train/val)
+        self.__register_map(toolbox)
         self.__register_fitness_func(toolbox)
         if self.validate and self.score_func is not None:
             self.__register_val_funcs(toolbox)
+
+        return toolbox
+
+    # @_fit_context(prefer_skip_nested_validation=True)
+    def fit(self, X, y=None, X_val=None, y_val=None):
+        """Fits the training data using GP-based symbolic regression."""
+        toolbox = self.__prepare_fit(X, y, X_val, y_val)
         self.__run(toolbox)
         self.is_fitted_ = True
         return self
@@ -635,13 +645,68 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
                 for idx in bad_indices:
                     self.__pop[i][idx] = toolbox.individual()
 
-    def __run(self, toolbox):
-        # Generate initial population
-        print("Generating initial population(s)...", flush=True)
+    def __step(self, toolbox):
+        num_evals = self.__evolve_islands(self.__cgen, toolbox)
+
+        # select the best individuals in the current population
+        # (including all islands)
+        best_inds = tools.selBest(
+            self.__flatten_list(self.__pop), k=self.num_best_inds_str
+        )
+
+        # compute and print population statistics (including all islands)
+        self.__stats(self.__flatten_list(self.__pop), self.__cgen, num_evals, toolbox)
+
+        if self.print_log:
+            print("Best individuals of this generation:", flush=True)
+            for i in range(self.num_best_inds_str):
+                print(str(best_inds[i]), flush=True)
+            if self.custom_logger is not None:
+                self.custom_logger(best_inds)
+
+        # Update history of best fitness and best validation error
+        self.__train_fit_history = self.__logbook.chapters["fitness"].select("min")
+        if self.validate:
+            self.val_fit_history = self.__logbook.chapters["valid"].select("valid_fit")
+            self.val_fit_history = self.__logbook.chapters["valid"].select("valid_fit")
+            self.min_valerr = min(self.val_fit_history)
+
+        if self.plot_history and (
+            self.__cgen % self.plot_freq == 0 or self.__cgen == 1
+        ):
+            self.__plot_history()
+
+        if (
+            self.plot_best
+            and (toolbox.plot_best_func is not None)
+            and (
+                self.__cgen % self.plot_freq == 0
+                or self.__cgen == 1
+                or self.__cgen == self.generations
+            )
+        ):
+            toolbox.plot_best_func(best_inds[0])
+
+        self.__best = best_inds[0]
+
+    def __generate_init_pop(self, toolbox):
         self.__pop = [None] * self.num_islands
         for i in range(self.num_islands):
             self.__pop[i] = toolbox.population(n=self.num_individuals)
 
+    def __evaluate_init_pop(self, toolbox):
+        for i in range(self.num_islands):
+            fitnesses = toolbox.map(toolbox.evaluate_train, self.__pop[i])
+
+            if self.callback_func is not None:
+                self.callback_func(self.__pop[i], fitnesses)
+            else:
+                for ind, fit in zip(self.__pop[i], fitnesses):
+                    ind.fitness.values = fit
+
+    def __run(self, toolbox):
+        print("Generating initial population(s)...", flush=True)
+        self.__generate_init_pop(toolbox)
         print("DONE.", flush=True)
 
         if self.plot_best_genealogy:
@@ -663,16 +728,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
 
         # Evaluate the fitness of the entire population on the training set
         print("Evaluating initial population(s)...", flush=True)
-
-        for i in range(self.num_islands):
-            fitnesses = toolbox.map(toolbox.evaluate_train, self.__pop[i])
-
-            if self.callback_func is not None:
-                self.callback_func(self.__pop[i], fitnesses)
-            else:
-                for ind, fit in zip(self.__pop[i], fitnesses):
-                    ind.fitness.values = fit
-
+        self.__evaluate_init_pop(toolbox)
         print("DONE.", flush=True)
 
         if self.validate:
@@ -683,54 +739,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         for gen in range(self.generations):
             self.__cgen = gen + 1
 
-            num_evals = self.__evolve_islands(self.__cgen, toolbox)
-
-            # select the best individuals in the current population
-            # (including all islands)
-            best_inds = tools.selBest(
-                self.__flatten_list(self.__pop), k=self.num_best_inds_str
-            )
-
-            # compute and print population statistics (including all islands)
-            self.__stats(
-                self.__flatten_list(self.__pop), self.__cgen, num_evals, toolbox
-            )
-
-            if self.print_log:
-                print("Best individuals of this generation:", flush=True)
-                for i in range(self.num_best_inds_str):
-                    print(str(best_inds[i]), flush=True)
-                if self.custom_logger is not None:
-                    self.custom_logger(best_inds)
-
-            # Update history of best fitness and best validation error
-            self.__train_fit_history = self.__logbook.chapters["fitness"].select("min")
-            if self.validate:
-                self.val_fit_history = self.__logbook.chapters["valid"].select(
-                    "valid_fit"
-                )
-                self.val_fit_history = self.__logbook.chapters["valid"].select(
-                    "valid_fit"
-                )
-                self.min_valerr = min(self.val_fit_history)
-
-            if self.plot_history and (
-                self.__cgen % self.plot_freq == 0 or self.__cgen == 1
-            ):
-                self.__plot_history()
-
-            if (
-                self.plot_best
-                and (toolbox.plot_best_func is not None)
-                and (
-                    self.__cgen % self.plot_freq == 0
-                    or self.__cgen == 1
-                    or self.__cgen == self.generations
-                )
-            ):
-                toolbox.plot_best_func(best_inds[0])
-
-            self.__best = best_inds[0]
+            self.__step(toolbox)
 
             if self.__best.fitness.values[0] <= 1e-15:
                 print("Fitness threshold reached - STOPPING.")
