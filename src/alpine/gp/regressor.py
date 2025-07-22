@@ -15,6 +15,8 @@ from alpine.gp.sympy import stringify_for_sympy
 from sklearn.base import BaseEstimator, RegressorMixin
 from sklearn.utils.validation import check_is_fitted, validate_data
 from sympy.parsing.sympy_parser import parse_expr
+from functools import partial
+from itertools import chain
 
 
 # reducing the number of threads launched by fitness evaluations
@@ -118,6 +120,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         custom_logger: Callable = None,
         special_term_name: str = "c",
         sympy_conversion_rules: Dict = None,
+        multiprocessing: bool = True,
     ):
         super().__init__()
         self.pset_config = pset_config
@@ -174,6 +177,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         self.custom_logger = custom_logger
         self.special_term_name = special_term_name
         self.sympy_conversion_rules = sympy_conversion_rules
+        self.multiprocessing = multiprocessing
 
     def __sklearn_tags__(self):
         # since we are allowing cases in which y=None
@@ -273,7 +277,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
     def __store_shared_objects(self, label: str, data: Dict):
         for key, value in data.items():
             # replace each item of the dataset with its obj ref
-            if not isinstance(value, ray.ObjectRef):
+            if not isinstance(value, ray.ObjectRef) and self.multiprocessing:
                 data[key] = ray.put(value)
         self.__data_store[label] = data
 
@@ -380,7 +384,12 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         # networkx.nx_agraph.write_dot(graph, "genealogy.dot")
 
     def __get_remote(self, f):
-        return ray.remote(num_cpus=self.num_cpus, max_calls=self.max_calls)(f).remote
+        if self.multiprocessing:
+            return ray.remote(num_cpus=self.num_cpus, max_calls=self.max_calls)(
+                f
+            ).remote
+        else:
+            return f
 
     def __register_fitness_func(self, toolbox):
         store = self.__data_store
@@ -404,10 +413,19 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         )
 
     def __register_map(self, toolbox):
-        toolbox_ref = ray.put(toolbox)
-        toolbox.register(
-            "map", mapper, toolbox_ref=toolbox_ref, batch_size=self.batch_size
-        )
+        if self.multiprocessing:
+            toolbox_ref = ray.put(toolbox)
+            toolbox.register(
+                "map", mapper, toolbox_ref=toolbox_ref, batch_size=self.batch_size
+            )
+        else:
+
+            def base_mapper(f, individuals, toolbox):
+                individuals_batch = [[ind] for ind in individuals]
+                fitnesses = map(partial(f, toolbox=toolbox), individuals_batch)
+                return list(chain.from_iterable(fitnesses))
+
+            toolbox.register("map", base_mapper, toolbox=toolbox)
 
     # @_fit_context(prefer_skip_nested_validation=True)
     def fit(self, X, y=None, X_val=None, y_val=None):
