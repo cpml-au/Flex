@@ -1,6 +1,6 @@
 from sklearn.utils.estimator_checks import check_estimator
 from alpine.gp.regressor import GPSymbolicRegressor
-from alpine.gp import util
+from alpine.gp.primitives import add_primitives_to_pset_from_dict
 from deap import gp
 
 # from sklearn.datasets import make_regression
@@ -32,7 +32,7 @@ def test_check_regressor():
         ],
     }
 
-    pset = util.add_primitives_to_pset_from_dict(pset, primitives)
+    pset = add_primitives_to_pset_from_dict(pset, primitives)
 
     common_data = {}
 
