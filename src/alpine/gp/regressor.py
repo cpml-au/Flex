@@ -450,7 +450,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
 
             toolbox.register("map", base_mapper, toolbox=toolbox)
 
-    def __prepare_fit(self, X, y, X_val, y_val):
+    def _prepare_fit(self, X, y, X_val, y_val):
         validated_data = validate_data(
             self,
             X,
@@ -502,7 +502,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
     # @_fit_context(prefer_skip_nested_validation=True)
     def fit(self, X, y=None, X_val=None, y_val=None):
         """Fits the training data using GP-based symbolic regression."""
-        toolbox = self.__prepare_fit(X, y, X_val, y_val)
+        toolbox = self._prepare_fit(X, y, X_val, y_val)
         self.__run(toolbox)
         self.is_fitted_ = True
         return self
@@ -645,8 +645,8 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
                 for idx in bad_indices:
                     self.__pop[i][idx] = toolbox.individual()
 
-    def __step(self, toolbox):
-        num_evals = self.__evolve_islands(self.__cgen, toolbox)
+    def _step(self, toolbox, cgen):
+        num_evals = self.__evolve_islands(cgen, toolbox)
 
         # select the best individuals in the current population
         # (including all islands)
@@ -655,7 +655,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         )
 
         # compute and print population statistics (including all islands)
-        self.__stats(self.__flatten_list(self.__pop), self.__cgen, num_evals, toolbox)
+        self.__stats(self.__flatten_list(self.__pop), cgen, num_evals, toolbox)
 
         if self.print_log:
             print("Best individuals of this generation:", flush=True)
@@ -672,7 +672,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             self.min_valerr = min(self.val_fit_history)
 
         if self.plot_history and (
-            self.__cgen % self.plot_freq == 0 or self.__cgen == 1
+            cgen % self.plot_freq == 0 or cgen == 1
         ):
             self.__plot_history()
 
@@ -681,20 +681,20 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             and (toolbox.plot_best_func is not None)
             and (
                 self.__cgen % self.plot_freq == 0
-                or self.__cgen == 1
-                or self.__cgen == self.generations
+                or cgen == 1
+                or cgen == self.generations
             )
         ):
             toolbox.plot_best_func(best_inds[0])
 
         self.__best = best_inds[0]
 
-    def __generate_init_pop(self, toolbox):
+    def _generate_init_pop(self, toolbox):
         self.__pop = [None] * self.num_islands
         for i in range(self.num_islands):
             self.__pop[i] = toolbox.population(n=self.num_individuals)
 
-    def __evaluate_init_pop(self, toolbox):
+    def _evaluate_init_pop(self, toolbox):
         for i in range(self.num_islands):
             fitnesses = toolbox.map(toolbox.evaluate_train, self.__pop[i])
 
@@ -706,7 +706,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
 
     def __run(self, toolbox):
         print("Generating initial population(s)...", flush=True)
-        self.__generate_init_pop(toolbox)
+        self._generate_init_pop(toolbox)
         print("DONE.", flush=True)
 
         if self.plot_best_genealogy:
@@ -728,7 +728,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
 
         # Evaluate the fitness of the entire population on the training set
         print("Evaluating initial population(s)...", flush=True)
-        self.__evaluate_init_pop(toolbox)
+        self._evaluate_init_pop(toolbox)
         print("DONE.", flush=True)
 
         if self.validate:
@@ -739,7 +739,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         for gen in range(self.generations):
             self.__cgen = gen + 1
 
-            self.__step(toolbox)
+            self._step(toolbox, self.__cgen)
 
             if self.__best.fitness.values[0] <= 1e-15:
                 print("Fitness threshold reached - STOPPING.")
