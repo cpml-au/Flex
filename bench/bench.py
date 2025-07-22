@@ -2,7 +2,12 @@
 from deap import gp
 
 from alpine.gp import regressor as gps
-from alpine.gp import util
+from alpine.gp.util import (
+    detect_nested_trigonometric_functions,
+    load_config_data,
+    compile_individual_with_consts,
+)
+from alpine.gp.primitives import add_primitives_to_pset_from_dict
 import numpy as np
 import ray
 
@@ -31,7 +36,7 @@ def check_trig_fn(ind):
 
 
 def check_nested_trig_fn(ind):
-    return util.detect_nested_trigonometric_functions(str(ind))
+    return detect_nested_trigonometric_functions(str(ind))
 
 
 def eval_model(individual, X, consts=[]):
@@ -56,7 +61,7 @@ def compute_MSE(individual, X, y, consts=[]):
 
 
 def eval_MSE_and_tune_constants(tree, toolbox, X, y):
-    individual, num_consts = util.compile_individual_with_consts(tree, toolbox)
+    individual, num_consts = compile_individual_with_consts(tree, toolbox)
 
     if num_consts > 0:
 
@@ -119,7 +124,7 @@ def predict(individuals_batch, toolbox, X, penalty, fitness_scale):
     predictions = [None] * len(individuals_batch)
 
     for i, tree in enumerate(individuals_batch):
-        callable, _ = util.compile_individual_with_consts(tree, toolbox)
+        callable, _ = compile_individual_with_consts(tree, toolbox)
         predictions[i] = eval_model(callable, X, consts=tree.consts)
 
     return predictions
@@ -130,7 +135,7 @@ def compute_MSEs(individuals_batch, toolbox, X, y, penalty, fitness_scale):
     total_errs = [None] * len(individuals_batch)
 
     for i, tree in enumerate(individuals_batch):
-        callable, _ = util.compile_individual_with_consts(tree, toolbox)
+        callable, _ = compile_individual_with_consts(tree, toolbox)
         total_errs[i] = compute_MSE(callable, X, y, consts=tree.consts)
 
     return total_errs
@@ -171,7 +176,7 @@ def assign_attributes(individuals_batch, attributes):
 
 def eval(problem, cfgfile, seed=42, grid_search=False):
 
-    regressor_params, config_file_data = util.load_config_data(cfgfile)
+    regressor_params, config_file_data = load_config_data(cfgfile)
 
     scaleXy = config_file_data["gp"]["scaleXy"]
 
@@ -197,9 +202,7 @@ def eval(problem, cfgfile, seed=42, grid_search=False):
     else:
         pset = gp.PrimitiveSetTyped("Main", [float] * num_variables, float)
 
-    pset = util.add_primitives_to_pset_from_dict(
-        pset, config_file_data["gp"]["primitives"]
-    )
+    pset = add_primitives_to_pset_from_dict(pset, config_file_data["gp"]["primitives"])
 
     batch_size = config_file_data["gp"]["batch_size"]
     if config_file_data["gp"]["use_constants"]:
