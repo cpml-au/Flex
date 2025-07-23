@@ -179,6 +179,8 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         self.sympy_conversion_rules = sympy_conversion_rules
         self.multiprocessing = multiprocessing
 
+        self.__best = None
+
     def __sklearn_tags__(self):
         # since we are allowing cases in which y=None
         # we need to modify the tag requires_y to False
@@ -671,9 +673,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             self.val_fit_history = self.__logbook.chapters["valid"].select("valid_fit")
             self.min_valerr = min(self.val_fit_history)
 
-        if self.plot_history and (
-            cgen % self.plot_freq == 0 or cgen == 1
-        ):
+        if self.plot_history and (cgen % self.plot_freq == 0 or cgen == 1):
             self.__plot_history()
 
         if (
