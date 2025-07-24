@@ -179,8 +179,6 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         self.sympy_conversion_rules = sympy_conversion_rules
         self.multiprocessing = multiprocessing
 
-        self.__best = None
-
     def __sklearn_tags__(self):
         # since we are allowing cases in which y=None
         # we need to modify the tag requires_y to False
@@ -337,13 +335,19 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
 
         return valid_fit, valid_err
 
+    def get_pop_stats(self):
+        pop = self.__flatten_list(self.__pop)
+        # for i in pop:
+        #     print(i.fitness.values[0])
+        return self.__mstats.compile(pop)
+
     def __stats(self, pop, gen, evals, toolbox):
         """Compute and print statistics of a population."""
 
         # LINE_UP = '\033[1A'
         # LINE_CLEAR = '\x1b[2K'
         # Compile statistics for the current population
-        record = self.__mstats.compile(pop)
+        record = self.get_pop_stats()
 
         # record the statistics in the logbook
         if self.validate:
@@ -518,9 +522,9 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         test_data = {"X": X}
         store = self.__data_store
         args_predict_func = self.__fetch_shared_objects(store["common"]) | test_data
-        u_best = self.predict_func(
-            (self.__best,), toolbox=toolbox, **args_predict_func
-        )[0]
+        u_best = self.predict_func((self._best,), toolbox=toolbox, **args_predict_func)[
+            0
+        ]
         return u_best
 
     def score(self, X, y=None):
@@ -540,7 +544,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             test_data = {"X": X, "y": y}
         store = self.__data_store
         args_score_func = self.__fetch_shared_objects(store["common"]) | test_data
-        score = self.score_func((self.__best,), toolbox=toolbox, **args_score_func)[0]
+        score = self.score_func((self._best,), toolbox=toolbox, **args_score_func)[0]
         return score
 
     def __flatten_list(self, nested_lst):
@@ -647,6 +651,19 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
                 for idx in bad_indices:
                     self.__pop[i][idx] = toolbox.individual()
 
+    def get_best_individuals(self, n_ind=0):
+        # if hasattr(self, "_best") and n_ind == 1:
+        #     print("_best already present")
+        #     return self._best
+        # else:
+        best_inds = tools.selBest(
+            self.__flatten_list(self.__pop), k=self.num_best_inds_str
+        )
+        if n_ind > 0:
+            return best_inds[:n_ind]
+        else:
+            return best_inds
+
     def _step(self, toolbox, cgen):
         num_evals = self.__evolve_islands(cgen, toolbox)
 
@@ -687,7 +704,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         ):
             toolbox.plot_best_func(best_inds[0])
 
-        self.__best = best_inds[0]
+        self._best = best_inds[0]
 
     def _generate_init_pop(self, toolbox):
         self.__pop = [None] * self.num_islands
@@ -741,7 +758,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
 
             self._step(toolbox, self.__cgen)
 
-            if self.__best.fitness.values[0] <= 1e-15:
+            if self._best.fitness.values[0] <= 1e-15:
                 print("Fitness threshold reached - STOPPING.")
                 break
 
@@ -754,12 +771,12 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         if self.sympy_conversion_rules is not None:
             self.__best_sympy = parse_expr(
                 stringify_for_sympy(
-                    self.__best, self.sympy_conversion_rules, self.special_term_name
+                    self._best, self.sympy_conversion_rules, self.special_term_name
                 )
             )
             best_str = self.__best_sympy
         else:
-            best_str = self.__best
+            best_str = self._best
 
         print(f"The best individual is {best_str}", flush=True)
 
@@ -775,7 +792,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             )
 
         if self.plot_best_genealogy:
-            self.__plot_genealogy(self.__best)
+            self.__plot_genealogy(self._best)
 
         if self.plot_best_individual_tree:
             self.__plot_best_individual_tree()
@@ -792,7 +809,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
 
     def __plot_best_individual_tree(self):
         """Plots the tree of the best individual at the end of the evolution."""
-        nodes, edges, labels = gp.graph(self.__best)
+        nodes, edges, labels = gp.graph(self._best)
         graph = nx.Graph()
         graph.add_nodes_from(nodes)
         graph.add_edges_from(edges)
@@ -807,7 +824,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
     def __save_best_individual(self, output_path: str):
         """Saves the string of the best individual of the population in a .txt file."""
         file = open(join(output_path, "best_ind.txt"), "w")
-        file.write(str(self.__best))
+        file.write(str(self._best))
         file.close()
 
     def __save_train_fit_history(self, output_path: str):
@@ -816,7 +833,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             np.save(join(output_path, "val_fit_history.npy"), self.val_fit_history)
 
     def get_best_individual(self):
-        return self.__best
+        return self._best
 
     def get_best_individual_sympy(self):
         if self.sympy_conversion_rules is not None:
