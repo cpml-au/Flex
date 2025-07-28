@@ -3,7 +3,7 @@ from dctkit.mesh.simplex import SimplicialComplex
 from dctkit.mesh.util import generate_line_mesh, build_complex_from_mesh
 from dctkit.math.opt import optctrl as oc
 from deap import gp
-from alpine.gp import regressor as gps
+from flex.gp import regressor as gps
 from dctkit import config
 import dctkit
 import numpy as np
@@ -12,8 +12,8 @@ import math
 from typing import Tuple, Callable, List
 import os
 import pytest
-from alpine.gp.util import load_config_data
-from alpine.gp.primitives import add_primitives_to_pset_from_dict
+from flex.gp.util import load_config_data
+from flex.gp.primitives import add_primitives_to_pset_from_dict
 
 # choose precision and whether to use GPU or CPU
 # needed for context of the plots at the end of the evolution

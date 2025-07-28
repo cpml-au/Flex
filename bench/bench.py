@@ -1,13 +1,13 @@
 # import matplotlib.pyplot as plt
 from deap import gp
 
-from alpine.gp import regressor as gps
-from alpine.gp.util import (
+from flex.gp import regressor as gps
+from flex.gp.util import (
     detect_nested_trigonometric_functions,
     load_config_data,
     compile_individual_with_consts,
 )
-from alpine.gp.primitives import add_primitives_to_pset_from_dict
+from flex.gp.primitives import add_primitives_to_pset_from_dict
 import numpy as np
 import ray
 

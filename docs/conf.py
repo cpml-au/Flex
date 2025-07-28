@@ -34,7 +34,7 @@ except ImportError:
     from sphinx import apidoc
 
 output_dir = os.path.join(__location__, "api")
-module_dir = os.path.join(__location__, "../src/alpine")
+module_dir = os.path.join(__location__, "../src/flex")
 try:
     shutil.rmtree(output_dir)
 except FileNotFoundError:
@@ -105,7 +105,7 @@ source_suffix = [".rst", ".md"]
 master_doc = "index"
 
 # General information about the project.
-project = "alpine"
+project = "flex"
 copyright = "2023, Alessandro Lucantonio"
 
 # The version info for the project you're documenting, acts as replacement for
@@ -117,7 +117,7 @@ copyright = "2023, Alessandro Lucantonio"
 # If you don’t need the separation provided between version and release,
 # just set them both to the same value.
 try:
-    from alpine import __version__ as version
+    from flex import __version__ as version
 except ImportError:
     version = ""
 
@@ -244,7 +244,7 @@ html_static_path = ["_static"]
 # html_file_suffix = None
 
 # Output file base name for HTML help builder.
-htmlhelp_basename = "alpine-doc"
+htmlhelp_basename = "flex-doc"
 
 
 # -- Options for LaTeX output ------------------------------------------------
@@ -264,7 +264,7 @@ latex_documents = [
     (
         "index",
         "user_guide.tex",
-        "alpine Documentation",
+        "flex Documentation",
         "Alessandro Lucantonio",
         "manual",
     )

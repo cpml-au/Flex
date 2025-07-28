@@ -1,11 +1,11 @@
 from sklearn.utils.estimator_checks import check_estimator
-from alpine.gp.regressor import GPSymbolicRegressor
-from alpine.gp.primitives import add_primitives_to_pset_from_dict
+from flex.gp.regressor import GPSymbolicRegressor
+from flex.gp.primitives import add_primitives_to_pset_from_dict
 from deap import gp
 
 # from sklearn.datasets import make_regression
 # from sklearn.model_selection import train_test_split, GridSearchCV
-from alpine.gp.util import dummy_fitness, dummy_score, dummy_predict
+from flex.gp.util import dummy_fitness, dummy_score, dummy_predict
 
 
 def test_check_regressor():
@@ -19,7 +19,7 @@ def test_check_regressor():
     pset.renameArguments(ARG0="x")
 
     primitives = {
-        "imports": {"alpine.gp.numpy_primitives": ["numpy_primitives"]},
+        "imports": {"flex.gp.numpy_primitives": ["numpy_primitives"]},
         "used": [
             {"name": "add", "dimension": None, "rank": None},
             {"name": "sub", "dimension": None, "rank": None},

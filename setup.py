@@ -1,5 +1,4 @@
 """
-    Setup file for alpine.
     Use setup.cfg to configure your project.
 
     This file was generated with PyScaffold 4.3.1.

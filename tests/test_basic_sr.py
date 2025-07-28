@@ -1,9 +1,9 @@
 import os
 from dctkit import config
 from deap import gp
-from alpine.gp.regressor import GPSymbolicRegressor
-from alpine.gp.util import load_config_data, compile_individuals
-from alpine.gp.primitives import add_primitives_to_pset_from_dict
+from flex.gp.regressor import GPSymbolicRegressor
+from flex.gp.util import load_config_data, compile_individuals
+from flex.gp.primitives import add_primitives_to_pset_from_dict
 import jax.numpy as jnp
 import ray
 
