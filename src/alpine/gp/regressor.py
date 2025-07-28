@@ -652,16 +652,13 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
                     self.__pop[i][idx] = toolbox.individual()
 
     def get_best_individuals(self, n_ind=0):
-        # if hasattr(self, "_best") and n_ind == 1:
-        #     print("_best already present")
-        #     return self._best
-        # else:
         best_inds = tools.selBest(
             self.__flatten_list(self.__pop), k=self.num_best_inds_str
         )
         if n_ind > 0:
-            return best_inds[:n_ind]
+            return best_inds[: min(n_ind, self.num_best_inds_str)]
         else:
+            # return the best k individuals according to num_best_inds_str
             return best_inds
 
     def _step(self, toolbox, cgen):
@@ -669,9 +666,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
 
         # select the best individuals in the current population
         # (including all islands)
-        best_inds = tools.selBest(
-            self.__flatten_list(self.__pop), k=self.num_best_inds_str
-        )
+        best_inds = self.get_best_individuals()
 
         # compute and print population statistics (including all islands)
         self.__stats(self.__flatten_list(self.__pop), cgen, num_evals, toolbox)
@@ -831,9 +826,6 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         np.save(join(output_path, "train_fit_history.npy"), self.__train_fit_history)
         if self.validate:
             np.save(join(output_path, "val_fit_history.npy"), self.val_fit_history)
-
-    def get_best_individual(self):
-        return self._best
 
     def get_best_individual_sympy(self):
         if self.sympy_conversion_rules is not None:
