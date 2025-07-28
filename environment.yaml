@@ -1,4 +1,4 @@
-name: alpine
+name: flex
 channels:
   - conda-forge
   - defaults

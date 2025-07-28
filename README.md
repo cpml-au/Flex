@@ -1,20 +1,20 @@
 [![Documentation Status](https://readthedocs.org/projects/alpine/badge/?version=latest)](https://alpine.readthedocs.io/en/latest/?badge=latest)
 
-# AlpineGP
+# Flex
 
-_AlpineGP_ is a Python library for **symbolic regression** via _Genetic Programming_.
+_Flex_ is a Python library for **symbolic regression** via _Genetic Programming_.
 It provides a high-level interface to the [`DEAP`](https://github.com/cpml-au/deap)
 library, including distributed computing functionalities.
 
 Besides solving classical symbolic regression problems involving _algebraic equations_
 (see, for example, the benchmark problems contained in the
-[SRBench](https://github.com/cavalab/srbench) repository), _AlpineGP_ is specifically
+[SRBench](https://github.com/cavalab/srbench) repository), _Flex_ is specifically
 designed to help identifying _symbolic_ models of _physical systems_ governed by **field equations**.
 To this aim, it allows to exploit the **discrete calculus** framework defined and implemented in the library
 [`dctkit`](https://github.com/cpml-au/dctkit) as a natural and effective language to express physical models
 (i.e., conservation laws).
 
-_AlpineGP_ has been introduced in the paper [_Discovering interpretable physical models
+_Flex_ has been introduced in the paper [_Discovering interpretable physical models
 with symbolic regression and discrete exterior calculus_](https://iopscience.iop.org/article/10.1088/2632-2153/ad1af2),
 along with several benchmark problems (heat transfer, linear elasticity, Euler's
 elastica). Scripts to reproduce these benchmarks can be found [here](https://github.com/cpml-au/SR-DEC_Examples).
@@ -72,7 +72,7 @@ Then, process the results using the `process_results` notebook.
 
 ## Usage
 
-Setting up a symbolic regression problem in _AlpineGP_ involves several key steps:
+Setting up a symbolic regression problem in _Flex_ involves several key steps:
 
 1. Define the functions that return the **prediction** and the **fitness**
    associated to an individual. These functions **must** have at least the following

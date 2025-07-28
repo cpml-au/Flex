@@ -24,7 +24,7 @@ gp:
     fun: gp.cxOnePoint
     kargs: "{}"
   primitives:
-    imports: { "alpine.gp.numpy_primitives": ["numpy_primitives"] }
+    imports: { "flex.gp.numpy_primitives": ["numpy_primitives"] }
     used:
       [
         { "name": "add", "dimension": None, "rank": None },
