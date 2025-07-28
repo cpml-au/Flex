@@ -1,14 +1,14 @@
 from deap import gp
-from alpine.gp.regressor import GPSymbolicRegressor
+from flex.gp.regressor import GPSymbolicRegressor
 import numpy as np
 import ray
 import warnings
 import re
-from alpine.gp.util import (
+from flex.gp.util import (
     detect_nested_trigonometric_functions,
     compile_individuals,
 )
-from alpine.gp.primitives import add_primitives_to_pset_from_dict
+from flex.gp.primitives import add_primitives_to_pset_from_dict
 
 
 # Ground truth
@@ -105,7 +105,7 @@ def main():
     pset.renameArguments(ARG0="x")
 
     primitives = {
-        "imports": {"alpine.gp.numpy_primitives": ["numpy_primitives"]},
+        "imports": {"flex.gp.numpy_primitives": ["numpy_primitives"]},
         "used": [
             {"name": "add", "dimension": None, "rank": None},
             {"name": "sub", "dimension": None, "rank": None},
