@@ -1,11 +1,9 @@
 from deap import algorithms, tools, gp, base, creator
 from deap.tools import migRing
-import matplotlib.pyplot as plt
 import numpy as np
 import operator
 from typing import List, Dict, Callable
 from os.path import join
-import networkx as nx
 from flex.data import Dataset
 import os
 import ray
@@ -47,15 +45,10 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             population (ex. 0.1 = keep top 10% individuals)
         overlapping_generation: True if the offspring competes with the parents
             for survival.
-        plot_history: whether to plot fitness vs generation number.
         print_log: whether to print the log containing the population statistics
             during the run.
         print_best_inds_str: number of best individuals' strings to print after
             each generation.
-        plot_best: whether to show the plot of the solution corresponding to the
-            best individual every plot_freq generations.
-        plot_freq: frequency (number of generations) of the plot of the best
-            individual.
         seed: list of individual strings to seed in the initial population.
         preprocess_func: function to call before evaluating the fitness of the
             individuals of each generation.
@@ -104,13 +97,8 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         preprocess_func: Callable | None = None,
         callback_func: Callable | None = None,
         seed_str: List[str] | None = None,
-        plot_history: bool = False,
         print_log: bool = False,
         num_best_inds_str: int = 1,
-        plot_best: bool = False,
-        plot_freq: int = 5,
-        plot_best_genealogy: bool = False,
-        plot_best_individual_tree: bool = False,
         save_best_individual: bool = False,
         save_train_fit_history: bool = False,
         output_path: str | None = None,
@@ -129,17 +117,10 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         self.score_func = score_func
         self.predict_func = predict_func
 
-        self.plot_best = plot_best
-
-        self.plot_best_genealogy = plot_best_genealogy
-
-        self.plot_history = plot_history
         self.print_log = print_log
         self.num_best_inds_str = num_best_inds_str
-        self.plot_freq = plot_freq
         self.preprocess_func = preprocess_func
         self.callback_func = callback_func
-        self.plot_best_individual_tree = plot_best_individual_tree
         self.save_best_individual = save_best_individual
         self.save_train_fit_history = save_train_fit_history
         self.output_path = output_path
@@ -337,8 +318,6 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
 
     def get_pop_stats(self):
         pop = self.__flatten_list(self.__pop)
-        # for i in pop:
-        #     print(i.fitness.values[0])
         return self.__mstats.compile(pop)
 
     def __stats(self, pop, gen, evals, toolbox):
@@ -361,56 +340,6 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             # Print statistics for the current population
             # print(LINE_UP, end=LINE_CLEAR, flush=True)
             print(self.__logbook.stream, flush=True)
-
-    def __plot_history(self):
-        """Plots the fitness of the best individual vs generation number."""
-        if not self.__plot_initialized:
-            self.__plot_initialized = True
-            # new figure number when starting with new evolution
-            self.__fig_id = self.__fig_id + 1
-            plt.figure(self.__fig_id).show()
-            plt.pause(0.01)
-
-        plt.figure(self.__fig_id)
-        fig = plt.gcf()
-
-        # Array of generations starts from 1
-        x = range(1, len(self.__train_fit_history) + 1)
-        plt.plot(x, self.__train_fit_history, "b", label="Training Fitness")
-        if self.validate:
-            plt.plot(x, self.val_fit_history, "r", label="Validation Fitness")
-            fig.legend(loc="upper right")
-
-        plt.xlabel("Generation #")
-        plt.ylabel("Best Fitness")
-
-        fig.canvas.draw()
-        fig.canvas.flush_events()
-        plt.pause(0.1)
-
-    def __plot_genealogy(self, best):
-        # Get genealogy of best individual
-        import networkx
-
-        gen_best = self.__history.getGenealogy(best)
-        graph = networkx.DiGraph(gen_best)
-        graph = graph.reverse()
-        pos = networkx.nx_agraph.graphviz_layout(
-            graph, prog="dot", args="-Gsplines=True"
-        )
-        # Retrieve individual strings for graph node labels
-        labels = gen_best.copy()
-        for key in labels.keys():
-            labels[key] = str(self.__history.genealogy_history[key])
-        plt.figure()
-        networkx.draw_networkx(graph, pos=pos)
-        label_options = {"ec": "k", "fc": "lightblue", "alpha": 1.0}
-        networkx.draw_networkx_labels(
-            graph, pos=pos, labels=labels, font_size=10, bbox=label_options
-        )
-
-        # Save genealogy to file
-        # networkx.nx_agraph.write_dot(graph, "genealogy.dot")
 
     def __get_remote(self, f):
         if self.multiprocessing:
@@ -488,14 +417,6 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         self.__store_datasets(datasets)
 
         self.__init_stats_log()
-
-        if self.plot_best_genealogy:
-            # Decorators for history
-            toolbox.decorate("mate", self.__history.decorator)
-            toolbox.decorate("mutate", self.__history.decorator)
-
-        self.__plot_initialized = False
-        self.__fig_id = 0
 
         # register functions for fitness evaluation (train/val)
         self.__register_map(toolbox)
@@ -651,22 +572,16 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
                 for idx in bad_indices:
                     self.__pop[i][idx] = toolbox.individual()
 
-    def get_best_individuals(self, n_ind=0):
-        best_inds = tools.selBest(
-            self.__flatten_list(self.__pop), k=self.num_best_inds_str
-        )
-        if n_ind > 0:
-            return best_inds[: min(n_ind, self.num_best_inds_str)]
-        else:
-            # return the best k individuals according to num_best_inds_str
-            return best_inds
+    def get_best_individuals(self, n_ind=1):
+        best_inds = tools.selBest(self.__flatten_list(self.__pop), k=n_ind)
+        return best_inds[:n_ind]
 
     def _step(self, toolbox, cgen):
         num_evals = self.__evolve_islands(cgen, toolbox)
 
         # select the best individuals in the current population
         # (including all islands)
-        best_inds = self.get_best_individuals()
+        best_inds = self.get_best_individuals(self.num_best_inds_str)
 
         # compute and print population statistics (including all islands)
         self.__stats(self.__flatten_list(self.__pop), cgen, num_evals, toolbox)
@@ -684,20 +599,6 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             self.val_fit_history = self.__logbook.chapters["valid"].select("valid_fit")
             self.val_fit_history = self.__logbook.chapters["valid"].select("valid_fit")
             self.min_valerr = min(self.val_fit_history)
-
-        if self.plot_history and (cgen % self.plot_freq == 0 or cgen == 1):
-            self.__plot_history()
-
-        if (
-            self.plot_best
-            and (toolbox.plot_best_func is not None)
-            and (
-                self.__cgen % self.plot_freq == 0
-                or cgen == 1
-                or cgen == self.generations
-            )
-        ):
-            toolbox.plot_best_func(best_inds[0])
 
         self._best = best_inds[0]
 
@@ -720,10 +621,6 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         print("Generating initial population(s)...", flush=True)
         self._generate_init_pop(toolbox)
         print("DONE.", flush=True)
-
-        if self.plot_best_genealogy:
-            # Populate the history and the Hall Of Fame of the first island
-            self.__history.update(self.__pop[0])
 
         # Seeds the first island with individuals
         if self.seed_str is not None:
@@ -757,7 +654,6 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
                 print("Fitness threshold reached - STOPPING.")
                 break
 
-        self.__plot_initialized = False
         print(" -= END OF EVOLUTION =- ", flush=True)
 
         self.__last_gen = self.__cgen
@@ -786,12 +682,6 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
                 flush=True,
             )
 
-        if self.plot_best_genealogy:
-            self.__plot_genealogy(self._best)
-
-        if self.plot_best_individual_tree:
-            self.__plot_best_individual_tree()
-
         if self.save_best_individual and self.output_path is not None:
             self.__save_best_individual(self.output_path)
             print("String of the best individual saved to disk.", flush=True)
@@ -801,20 +691,6 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             print("Training fitness history saved to disk.", flush=True)
 
         # NOTE: ray.shutdown should be manually called by the user
-
-    def __plot_best_individual_tree(self):
-        """Plots the tree of the best individual at the end of the evolution."""
-        nodes, edges, labels = gp.graph(self._best)
-        graph = nx.Graph()
-        graph.add_nodes_from(nodes)
-        graph.add_edges_from(edges)
-        pos = nx.nx_agraph.graphviz_layout(graph, prog="dot")
-        plt.figure(figsize=(7, 7))
-        nx.draw_networkx_nodes(graph, pos, node_size=900, node_color="w")
-        nx.draw_networkx_edges(graph, pos)
-        nx.draw_networkx_labels(graph, pos, labels)
-        plt.axis("off")
-        plt.show()
 
     def __save_best_individual(self, output_path: str):
         """Saves the string of the best individual of the population in a .txt file."""
