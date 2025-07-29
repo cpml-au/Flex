@@ -11,17 +11,16 @@ gp:
   max_: 4
   overlapping_generation: True
   validate: False
-  penalty: { "method": "length", "reg_param": 1.e-3 }
+  penalty: { "reg_param": 1.e-3 }
   select:
-    # fun: self.tournament_with_elitism
+    # fun: tools.selection.tournament_with_elitism
     # kargs: "{'tournsize': 2, 'stochastic_tourn': { 'enabled': True, 'prob': [0.7, 0.3] }}"
     # fun: tools.selection.selStochasticUniversalSampling
-    # kargs: "{'k': self.num_individuals}"
     fun: random.sample
-    kargs: "{}"
+    kargs: "{'k': self.num_individuals}"
   mutate:
     fun: gp.mixedMutate
-    kargs: "{'expr': self.toolbox.expr_mut, 'pset': self.pset, 'prob': [0.7, 0.2, 0.1]}" # string is important
+    kargs: "{'expr': toolbox.expr_mut, 'pset': pset, 'prob': [0.7, 0.2, 0.1]}" # string is important
     expr_mut: gp.genHalfAndHalf
     expr_mut_kargs: "{'min_': 1, 'max_': 2}"
   crossover:

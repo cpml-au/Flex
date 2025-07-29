@@ -29,6 +29,17 @@ def load_config_data(filename):
         "overlapping_generation"
     ]
 
+    regressor_params["select_fun"] = config_file_data["gp"]["select"]["fun"]
+    regressor_params["select_args"] = config_file_data["gp"]["select"]["kargs"]
+    regressor_params["mut_fun"] = config_file_data["gp"]["mutate"]["fun"]
+    regressor_params["mut_args"] = config_file_data["gp"]["mutate"]["kargs"]
+    regressor_params["expr_mut_fun"] = config_file_data["gp"]["mutate"]["expr_mut"]
+    regressor_params["expr_mut_args"] = config_file_data["gp"]["mutate"][
+        "expr_mut_kargs"
+    ]
+    regressor_params["crossover_fun"] = config_file_data["gp"]["crossover"]["fun"]
+    regressor_params["crossover_args"] = config_file_data["gp"]["crossover"]["kargs"]
+
     regressor_params["validate"] = config_file_data["gp"]["validate"]
 
     return regressor_params, config_file_data
