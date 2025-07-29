@@ -262,7 +262,7 @@ def eval(problem, cfgfile, seed=42, grid_search=False):
     else:
         best_estimator = est
 
-    best = best_estimator.get_best_individual()
+    best = best_estimator.get_best_individuals(n_ind=1)[0]
 
     if hasattr(best, "consts"):
         print("Best parameters = ", best.consts)
