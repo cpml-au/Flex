@@ -198,7 +198,6 @@ def test_poisson1d(set_test_dir, yamlfile):
         print_log=True,
         common_data=common_params,
         seed_str=seed_str,
-        plot_history=False,
         save_best_individual=True,
         save_train_fit_history=True,
         output_path="./",
