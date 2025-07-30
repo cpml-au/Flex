@@ -304,9 +304,6 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
 
         self.__train_fit_history = []
 
-        # Create history object to build the genealogy tree
-        self.__history = tools.History()
-
     def __compute_valid_stats(self, pop, toolbox):
         best = tools.selBest(pop, k=1)
         # FIXME: ugly way of handling lists/tuples; assume eval_val_MSE returns a
@@ -601,6 +598,14 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             self.min_valerr = min(self.val_fit_history)
 
         self._best = best_inds[0]
+
+    def _restart(self, toolbox, save_best_inds=True):
+        best_inds = [None] * self.num_islands
+        for i in range(self.num_islands):
+            best_inds[i] = tools.selBest(self.__pop[i], k=1)[0]
+        self._generate_init_pop(toolbox)
+        for i in range(self.num_islands):
+            self.__pop[i][0] = best_inds[i]
 
     def _generate_init_pop(self, toolbox):
         self.__pop = [None] * self.num_islands
