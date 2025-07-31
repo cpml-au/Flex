@@ -94,7 +94,7 @@ def predict(individuals_batch, toolbox, X):
     predictions = [None] * len(individuals_batch)
 
     for i, tree in enumerate(individuals_batch):
-        callable, _ = util.compile_individual_with_consts(tree, toolbox)
+        callable, _ = compile_individual_with_consts(tree, toolbox)
         # predictions[i] = ...
     # ...
     return predictions
@@ -105,7 +105,7 @@ def fitness(individuals_batch, toolbox, X, y):
 
     for i, tree in enumerate(individuals_batch):
 
-        callable, _ = util.compile_individual_with_consts(tree, toolbox)
+        callable, _ = compile_individual_with_consts(tree, toolbox)
         # MSE = ...
 
         # each fitness MUST be a tuple (required by DEAP)
@@ -126,12 +126,12 @@ SR run on a given dataset.
 yamlfile = "simple_sr.yaml"
 filename = os.path.join(os.path.dirname(__file__), yamlfile)
 
-regressor_params, config_file_data = util.load_config_data(filename)
+regressor_params, config_file_data = load_config_data(filename)
 
 # pset = gp.PrimitiveSetTyped(...)
 # pset.renameArguments(ARG0="x")
 
-pset = util.add_primitives_to_pset_from_dict(
+pset = add_primitives_to_pset_from_dict(
     pset, config_file_data["gp"]["primitives"]
 )
 
