@@ -481,6 +481,23 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             start = end  # Update the start index for the next sublist
         return result
 
+    def __survival_selection(self, parents, offspring):
+        if not self.overlapping_generation:
+            # The population is entirely replaced by the offspring
+            return offspring
+        else:
+            whole_pop = parents + offspring
+            fitnesses = [x.fitness.values[0] for x in whole_pop]
+            exp_fitnesses = np.exp(fitnesses - np.max(fitnesses))
+            probs = exp_fitnesses / exp_fitnesses.sum()
+            # whole_pop = np.array(whole_pop, dtype=object)
+            # return random.choices(whole_pop, weights=probs, k=self.num_individuals)
+            # return np.random.choice(
+            # whole_pop, self.num_individuals, replace=True, p=probs
+            # ).tolist()
+            # parents and offspring compete for survival (truncation selection)
+            return tools.selBest(parents + offspring, self.num_individuals)
+
     def __evolve_islands(self, cgen: int, toolbox):
         num_evals = 0
 
@@ -522,15 +539,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
                 for ind, fit in zip(invalid_inds[i], fitnesses[i]):
                     ind.fitness.values = fit
 
-            # survival selection
-            if not self.overlapping_generation:
-                # The population is entirely replaced by the offspring
-                self.__pop[i][:] = offsprings[i]
-            else:
-                # parents and offspring compete for survival (truncation selection)
-                self.__pop[i] = tools.selBest(
-                    self.__pop[i] + offsprings[i], self.num_individuals
-                )
+            self.__pop[i] = self.__survival_selection(self.__pop[i], offsprings[i])
 
         # migrations among islands
         if cgen % self.mig_frac == 0 and self.num_islands > 1:
