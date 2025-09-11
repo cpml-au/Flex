@@ -285,7 +285,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         # Headers of fields to be printed during log
         if self.validate:
             self.__logbook.header = "gen", "evals", "fitness", "size", "valid"
-            self.__logbook.chapters["valid"].header = "valid_fit", "valid_err"
+            self.__logbook.chapters["valid"].header = ("valid_err",)
         else:
             self.__logbook.header = "gen", "evals", "fitness", "size"
         self.__logbook.chapters["fitness"].header = "min", "avg", "max", "std"
@@ -308,10 +308,8 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         best = tools.selBest(pop, k=1)
         # FIXME: ugly way of handling lists/tuples; assume eval_val_MSE returns a
         # single-valued tuple as eval_val_fit
-        valid_fit = toolbox.map(toolbox.evaluate_val_fit, best)[0][0]
         valid_err = toolbox.map(toolbox.evaluate_val_MSE, best)[0]
-
-        return valid_fit, valid_err
+        return valid_err
 
     def get_pop_stats(self):
         pop = self.__flatten_list(self.__pop)
@@ -328,8 +326,8 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         # record the statistics in the logbook
         if self.validate:
             # compute satistics related to the validation set
-            valid_fit, valid_err = self.__compute_valid_stats(pop, toolbox)
-            record["valid"] = {"valid_fit": valid_fit, "valid_err": valid_err}
+            valid_err = self.__compute_valid_stats(pop, toolbox)
+            record["valid"] = {"valid_err": valid_err}
 
         self.__logbook.record(gen=gen, evals=evals, **record)
 
@@ -401,7 +399,10 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             train_data = {"X": X, "y": y}
 
         if self.validate and X_val is not None:
-            val_data = {"X": X_val, "y": y_val}
+            if y_val is None:
+                val_data = {"X": X_val}
+            else:
+                val_data = {"X": X_val, "y": y_val}
             datasets = {"train": train_data, "val": val_data}
         else:
             datasets = {"train": train_data}
@@ -593,8 +594,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         # Update history of best fitness and best validation error
         self.__train_fit_history = self.__logbook.chapters["fitness"].select("min")
         if self.validate:
-            self.val_fit_history = self.__logbook.chapters["valid"].select("valid_fit")
-            self.val_fit_history = self.__logbook.chapters["valid"].select("valid_fit")
+            self.val_fit_history = self.__logbook.chapters["valid"].select("valid_err")
             self.min_valerr = min(self.val_fit_history)
 
         self._best = best_inds[0]
@@ -683,7 +683,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
 
         if self.validate:
             print(
-                f"The best fitness on the validation set is {self.min_valerr}",
+                f"The best error on the validation set is {self.min_valerr}",
                 flush=True,
             )
 
