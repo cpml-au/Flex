@@ -612,6 +612,19 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         for i in range(self.num_islands):
             self.__pop[i] = toolbox.population(n=self.num_individuals)
 
+        # Seeds the first island with individuals
+        if self.seed_str is not None:
+            print(" Seeding population with individuals...", flush=True)
+            self.__pop[0][: len(self.seed_ind)] = self.seed_ind
+
+        if self.remove_init_duplicates:
+            print(" Removing duplicates from initial population(s)...", flush=True)
+            self.__remove_duplicates(toolbox)
+            print(" DONE.", flush=True)
+
+        if self.preprocess_func is not None:
+            self.preprocess_func(self.__pop)
+
     def _evaluate_init_pop(self, toolbox):
         for i in range(self.num_islands):
             fitnesses = toolbox.map(toolbox.evaluate_train, self.__pop[i])
@@ -626,19 +639,6 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         print("Generating initial population(s)...", flush=True)
         self._generate_init_pop(toolbox)
         print("DONE.", flush=True)
-
-        # Seeds the first island with individuals
-        if self.seed_str is not None:
-            print("Seeding population with individuals...", flush=True)
-            self.__pop[0][: len(self.seed_ind)] = self.seed_ind
-
-        if self.remove_init_duplicates:
-            print("Removing duplicates from initial population(s)...", flush=True)
-            self.__remove_duplicates(toolbox)
-            print("DONE.", flush=True)
-
-        if self.preprocess_func is not None:
-            self.preprocess_func(self.__pop)
 
         # Evaluate the fitness of the entire population on the training set
         print("Evaluating initial population(s)...", flush=True)
