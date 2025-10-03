@@ -77,7 +77,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         mut_fun: str = "gp.mutUniform",
         mut_args: str = "{'expr': toolbox.expr_mut, 'pset': pset}",
         expr_mut_fun: str = "gp.genHalfAndHalf",
-        expr_mut_args: str = "{'min_': 1, 'max_': 3}",
+        expr_mut_args: str = "{'min_': 1, 'max_': 3, 'max_length': 20}",
         crossover_fun: str = "gp.cxOnePoint",
         crossover_args: str = "{}",
         min_height: int = 1,
