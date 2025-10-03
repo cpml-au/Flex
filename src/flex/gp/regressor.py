@@ -82,6 +82,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         crossover_args: str = "{}",
         min_height: int = 1,
         max_height: int = 3,
+        max_length: int = 100,
         num_individuals: int = 10,
         generations: int = 1,
         num_islands: int = 1,
@@ -143,6 +144,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         self.crossover_args = crossover_args
         self.min_height = min_height
         self.max_height = max_height
+        self.max_length = max_length
         self.mig_freq = mig_freq
         self.mig_frac = mig_frac
 
@@ -206,6 +208,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             pset=pset,
             min_=self.min_height,
             max_=self.max_height,
+            max_length=self.max_length,
         )
         toolbox.register(
             "expr_pop",
@@ -213,6 +216,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             pset=pset,
             min_=self.min_height,
             max_=self.max_height,
+            max_length=self.max_length,
             is_pop=True,
         )
         if not hasattr(creator, "FitnessMin"):

@@ -20,7 +20,7 @@ gp:
     fun: gp.mutUniform
     kargs: "{'expr': toolbox.expr_mut, 'pset': pset}" # string is important
     expr_mut: gp.genFull
-    expr_mut_kargs: "{'min_': 1, 'max_': 3}"
+    expr_mut_kargs: "{'min_': 1, 'max_': 3, 'max_length': 20}"
   crossover:
     fun: gp.cxOnePoint
     kargs: "{}"
