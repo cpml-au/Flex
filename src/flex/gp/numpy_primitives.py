@@ -1,6 +1,7 @@
 from .primitives import PrimitiveParams
 import numpy as np
 
+
 numpy_primitives = {
     "add": PrimitiveParams(np.add, [float, float], float),
     "sub": PrimitiveParams(np.subtract, [float, float], float),
@@ -12,6 +13,11 @@ numpy_primitives = {
     "arccos": PrimitiveParams(np.arccos, [float], float),
     "exp": PrimitiveParams(np.exp, [float], float),
     "log": PrimitiveParams(np.log, [float], float),
+    "prot_log": PrimitiveParams(lambda x: np.log(np.abs(x)), [float], float),
+    "pow": PrimitiveParams(np.pow, [float, float], float),
+    "prot_pow": PrimitiveParams(
+        lambda x, k: np.pow(np.abs(x), k), [float, float], float
+    ),
     "sqrt": PrimitiveParams(np.sqrt, [float], float),
     "square": PrimitiveParams(np.square, [float], float),
     "aq": PrimitiveParams(
@@ -28,4 +34,6 @@ conversion_rules = {
     "pow": lambda *args_: "Pow({}, {})".format(*args_),
     "square": lambda *args_: "Pow({}, 2)".format(*args_),
     "aq": lambda *args_: "Mul({}, Pow(Add(1, Pow({}, 2), -1))".format(*args_),
+    "prot_pow": lambda *args_: "Pow(Abs({}), {})".format(*args_),
+    "prot_log": lambda *args_: "log(Abs({}))".format(*args_),
 }
