@@ -77,7 +77,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         mut_fun: str = "gp.mutUniform",
         mut_args: str = "{'expr': toolbox.expr_mut, 'pset': pset}",
         expr_mut_fun: str = "gp.genHalfAndHalf",
-        expr_mut_args: str = "{'min_': 1, 'max_': 3, 'max_length': 20}",
+        expr_mut_args: str = "{'min_': 1, 'max_': 3}",
         crossover_fun: str = "gp.cxOnePoint",
         crossover_args: str = "{}",
         min_height: int = 1,
@@ -208,16 +208,6 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             pset=pset,
             min_=self.min_height,
             max_=self.max_height,
-            max_length=self.max_length,
-        )
-        toolbox.register(
-            "expr_pop",
-            gp.genHalfAndHalf,
-            pset=pset,
-            min_=self.min_height,
-            max_=self.max_height,
-            max_length=self.max_length,
-            is_pop=True,
         )
         if not hasattr(creator, "FitnessMin"):
             creator.create("FitnessMin", base.Fitness, weights=(-1.0,))
