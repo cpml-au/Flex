@@ -208,6 +208,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             pset=pset,
             min_=self.min_height,
             max_=self.max_height,
+            max_length=self.max_length,
         )
         if not hasattr(creator, "FitnessMin"):
             creator.create("FitnessMin", base.Fitness, weights=(-1.0,))
