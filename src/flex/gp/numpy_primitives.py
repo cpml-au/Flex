@@ -33,7 +33,7 @@ conversion_rules = {
     "add": lambda *args_: "Add({},{})".format(*args_),
     "pow": lambda *args_: "Pow({}, {})".format(*args_),
     "square": lambda *args_: "Pow({}, 2)".format(*args_),
-    "aq": lambda *args_: "Mul({}, Pow(Add(1, Pow({}, 2), -1))".format(*args_),
+    "aq": lambda *args_: "Mul({}, Pow(Add(1, Pow({}, 2)), -1/2))".format(*args_),
     "prot_pow": lambda *args_: "Pow(Abs({}), {})".format(*args_),
     "prot_log": lambda *args_: "log(Abs({}))".format(*args_),
 }
