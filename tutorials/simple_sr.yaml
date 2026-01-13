@@ -1,0 +1,63 @@
+gp:
+  num_individuals: 1000 # 1000
+  generations: 20 # 200
+  multi_island:
+    num_islands: 2 # 15
+    migration: { "freq": 10, "frac": 0.05 }
+  crossover_prob: 0.
+  mut_prob: 1.
+  frac_elitist: 0.
+  min_: 2
+  max_: 4
+  overlapping_generation: True
+  validate: False
+  penalty: { "reg_param": 1.e-3 }
+  select:
+    # fun: tools.selection.tournament_with_elitism
+    # kargs: "{'tournsize': 2, 'stochastic_tourn': { 'enabled': True, 'prob': [0.7, 0.3] }}"
+    # fun: tools.selection.selStochasticUniversalSampling
+    fun: random.sample
+    kargs: "{'k': self.num_individuals}"
+  mutate:
+    fun: gp.mixedMutate
+    kargs: "{'expr': toolbox.expr_mut, 'pset': pset, 'prob': [0.7, 0.2, 0.1]}" # string is important
+    expr_mut: gp.genHalfAndHalf
+    expr_mut_kargs: "{'min_': 1, 'max_': 2}"
+  crossover:
+    fun: gp.cxOnePoint
+    kargs: "{}"
+  scaleXy: True
+  batch_size: 10
+  use_constants: True
+  primitives:
+    imports:
+      {
+        # "flex.gp.jax_primitives": ["jax_primitives"],
+        "flex.gp.numpy_primitives": ["numpy_primitives"],
+      }
+    used: [
+        # { "name": "AddF", "dimension": None, "rank": None },
+        # { "name": "SubF", "dimension": None, "rank": None },
+        # { "name": "MulF", "dimension": None, "rank": None },
+        # { "name": "Div", "dimension": None, "rank": None },
+        # { "name": "SquareF", "dimension": None, "rank": None },
+        # { "name": "SinF", "dimension": None, "rank": None },
+        # { "name": "ArcsinF", "dimension": None, "rank": None },
+        # { "name": "CosF", "dimension": None, "rank": None },
+        # { "name": "ArccosF", "dimension": None, "rank": None },
+        # { "name": "ExpF", "dimension": None, "rank": None },
+        # { "name": "LogF", "dimension": None, "rank": None },
+        # { "name": "InvF", "dimension": None, "rank": None },
+        { "name": "add", "dimension": None, "rank": None },
+        { "name": "sub", "dimension": None, "rank": None },
+        { "name": "mul", "dimension": None, "rank": None },
+        # { "name": "div", "dimension": None, "rank": None },
+        { "name": "aq", "dimension": None, "rank": None },
+        # { "name": "square", "dimension": None, "rank": None },
+        { "name": "sin", "dimension": None, "rank": None },
+        # { "name": "arcsin", "dimension": None, "rank": None },
+        # { "name": "cos", "dimension": None, "rank": None },
+        # { "name": "arccos", "dimension": None, "rank": None },
+        # { "name": "exp", "dimension": None, "rank": None },
+        # { "name": "log", "dimension": None, "rank": None },
+      ]
