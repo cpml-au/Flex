@@ -30,40 +30,75 @@ os.environ["XLA_FLAGS"] = (
 
 
 class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
-    """Symbolic regression problem via Genetic Programming.
+    """Symbolic regression via Genetic Programming (GP).
+
+    This regressor evolves symbolic expressions represented as GP trees in order
+    to minimize a user-defined fitness function. It is built on top of DEAP and
+    follows the scikit-learn estimator interface.
+
+    The regressor supports:
+    - Arbitrary user-defined fitness, prediction, and scoring functions
+    - Multi-island evolution with periodic migration
+    - Elitism and overlapping or non-overlapping generations
+    - Parallel fitness evaluation using Ray
+    - Validation-set monitoring
+    - Conversion of the best individual to a SymPy expression
 
     Args:
-        pset: set of primitives and terminals (loosely or strongly typed).
+        pset_config: set of primitives and terminals (loosely or strongly typed).
+        fitness: fitness evaluation function. It must return a tuple containing a
+            single scalar fitness value, e.g. `(fitness_value,)`.
         predict_func: function that returns a prediction given an individual and
             a test `Dataset` as inputs.
-        NINDIVIDUALS: number of individuals in the parent population.
-        NGEN: number of generations.
+        score_func: error metric used for validation and for the `score` method
+            (e.g. mean squared error).
+        select_fun: string representing the selection operator to use.
+        select_args: stringified dictionary of keyword arguments passed to the
+            selection operator. The string is evaluated at runtime.
+        mut_fun: mutation operator.
+        mut_args: arguments for the mutation operator.
+        expr_mut_fun: expression generator used during mutation.
+        expr_mut_args: arguments for the mutation expression generator.
+        crossover_fun: crossover operator.
+        crossover_args: arguments for the crossover operator.
+        min_height: minimum height of GP trees at initialization.
+        max_height: maximum height of GP trees at initialization.
+        max_length: maximum number of nodes allowed in a GP tree.
+        num_individuals: population size per island.
+        generations: number of generations.
         num_islands: number of islands (for a multi-island model).
+        remove_init_duplicates: whether to remove duplicate individuals from
+            the initial populations.
         crossover_prob: cross-over probability.
-        MUTPB: mutation probability.
-        frac_elitist: best individuals to keep expressed as a percentage of the
-            population (ex. 0.1 = keep top 10% individuals)
+        mig_freq: migration frequency (in generations).
+        mig_frac: fraction of individuals exchanged during migration.
+        crossover_prob: probability of applying crossover.
+        mut_prob: probability of applying mutation.
+        frac_elitist: fraction of elite individuals preserved each generation.
         overlapping_generation: True if the offspring competes with the parents
             for survival.
+        common_data: dictionary of arguments shared between fitness, prediction,
+          and scoring functions.
+        validate: whether to use a validation dataset.
+        preprocess_func: function applied to individuals before fitness evaluation.
+        callback_func: function called after fitness evaluation to perform custom
+            processing.
+        seed_str: list of GP expressions used to seed the initial population.
         print_log: whether to print the log containing the population statistics
             during the run.
-        print_best_inds_str: number of best individuals' strings to print after
-            each generation.
-        seed: list of individual strings to seed in the initial population.
-        preprocess_func: function to call before evaluating the fitness of the
-            individuals of each generation.
-        callback_func: function to call after evaluating the fitness of the
-            individuals of each generation. It takes the population/batch of
-            individuals and the list containing all the values of the attributes
-            returned by the fitness evaluation function.
-        max_calls: Maximum number of tasks a Ray worker can execute before being
-            terminated and restarted. The default is 0, which means infinite number
-            of tasks.
-        custom_logger: A user-defined callable that handles logging or printing
-            messages. It accepts the list of best individuals of each generation.
-            The default is None.
-        sympy_conversion_rules: a dictionary of convertion rules to map a given set of
-            primitives to sympy primitives. The default is None.
+        num_best_inds_str: number of best individuals printed at each generation.
+        save_best_individual: whether to save the string representation of the best
+            individual.
+        save_train_fit_history: whether to save the training fitness history.
+        output_path: directory where outputs are saved.
+        batch_size : batch size used for Ray-based fitness evaluation.
+        num_cpus: number of CPUs allocated to each Ray task.
+        max_calls: maximum number of tasks a Ray worker can execute before restart.
+            The default is 0, which means infinite number of tasks.
+        custom_logger: user-defined logging function called with the best individuals.
+        special_term_name: name used for ephemeral constants during SymPy conversion.
+        sympy_conversion_rules: mapping from GP primitives to SymPy primitives.
+        multiprocessing: whether to use Ray for parallel fitness evaluation.
     """
 
     def __init__(
@@ -421,13 +456,33 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
 
     # @_fit_context(prefer_skip_nested_validation=True)
     def fit(self, X, y=None, X_val=None, y_val=None):
-        """Fits the training data using GP-based symbolic regression."""
+        """Fits the training data using GP-based symbolic regression.
+
+        This method initializes the populations, evaluates the fitness of the
+        individuals, and evolves the populations for the specified number of
+        generations.
+
+        Args:
+            X: training input data.
+            y: training targets. If None, the fitness function must not require
+                targets.
+            X_val: validation input data.
+            y_val: validation targets.
+        """
         toolbox = self._prepare_fit(X, y, X_val, y_val)
         self.__run(toolbox)
         self.is_fitted_ = True
         return self
 
     def predict(self, X):
+        """Predict outputs using the best evolved individual.
+
+        Args:
+            X: Input data.
+
+        Returns:
+            predictions computed by the best individual.
+        """
         check_is_fitted(self)
         toolbox, pset = self.__creator_toolbox_pset_config()
         X = validate_data(
@@ -442,8 +497,15 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         return u_best
 
     def score(self, X, y=None):
-        """Computes the error metric (passed to the `GPSymbolicRegressor` constructor)
-        on a given dataset.
+        """Compute the score of the best evolved individual.
+        This method evaluates the user-provided `score_func` on the given dataset.
+
+        Args:
+            X: input data.
+            y: target values.
+
+        Returns:
+            score value returned by `score_func`.
         """
         check_is_fitted(self)
         toolbox, pset = self.__creator_toolbox_pset_config()
@@ -566,6 +628,14 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
                     self.__pop[i][idx] = toolbox.individual()
 
     def get_best_individuals(self, n_ind=1):
+        """Return the best individuals across all islands.
+
+        Args:
+            n_ind : number of top individuals to return.
+
+        Returns:
+            List of the best GP individuals.
+        """
         best_inds = tools.selBest(self.__flatten_list(self.__pop), k=n_ind)
         return best_inds[:n_ind]
 
@@ -704,6 +774,12 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             np.save(join(output_path, "val_fit_history.npy"), self.val_fit_history)
 
     def get_best_individual_sympy(self):
+        """Return the SymPy expression of the best individual.
+
+        Returns:
+            sympy representation of the best individual if conversion is enabled.
+        """
+
         if self.sympy_conversion_rules is not None:
             return self.__best_sympy
 
@@ -718,7 +794,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         at the end of the evolution, evaluated over the test dataset.
 
         Args:
-            test_data: test dataset.
+            X_test: test input data.
             output_path: path where the predictions should be saved (one .npy file for
                 each sample in the test dataset).
         """
