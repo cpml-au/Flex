@@ -1,0 +1,41 @@
+gp:
+  num_individuals: 20
+  generations: 10
+  multi_island:
+    num_islands: 1
+    migration: { "freq": 10, "frac": 0.05 }
+  crossover_prob: 0.2
+  mut_prob: 0.8
+  frac_elitist: 0
+  min_: 1
+  max_: 4
+  overlapping_generation: True
+  validate: False
+  penalty: { "reg_param": 0.1 }
+  select:
+    fun: tools.selection.tournament_with_elitism
+    kargs: "{'num_elitist': self.n_elitist, 'tournsize': 3, 'stochastic_tourn': { 'enabled': False, 'prob': [0.8, 0.2] }}"
+  mutate:
+    fun: gp.mixedMutate
+    kargs: "{'expr': toolbox.expr_mut, 'pset': pset, 'prob': [0.7, 0.2, 0.1]}" # string is important
+    expr_mut: gp.genHalfAndHalf
+    expr_mut_kargs: "{'min_': 1, 'max_': 3}"
+  crossover:
+    fun: gp.cxOnePoint
+    kargs: "{}"
+  primitives:
+    imports: { "flex.gp.cochain_primitives": ["coch_primitives"] }
+    used:
+      [
+        { "name": "AddF", "dimension": None, "rank": None },
+        { "name": "SubF", "dimension": None, "rank": None },
+        { "name": "MulF", "dimension": None, "rank": None },
+        { "name": "Div", "dimension": None, "rank": None },
+        { "name": "AddC", "dimension": ["0", "1"], "rank": ["SC"] },
+        { "name": "SubC", "dimension": ["0", "1"], "rank": ["SC"] },
+        { "name": "cob", "dimension": ["0", "1"], "rank": ["SC"] },
+        { "name": "del", "dimension": ["1"], "rank": ["SC"] },
+        { "name": "St1", "dimension": ["0", "1"], "rank": ["SC"] },
+        { "name": "MF", "dimension": ["0", "1"], "rank": ["SC"] },
+        { "name": "Inn", "dimension": ["0", "1"], "rank": ["SC"] },
+      ]
