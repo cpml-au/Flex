@@ -4,7 +4,7 @@ from deap.gp import PrimitiveTree, Primitive
 
 def deap_primitive_to_sympy_expr(prim: Primitive, conversion_rules: Dict, args: Tuple):
     """Convert a DEAP primitive and its arguments into the corresponding sympy
-        expression.
+    expression.
 
     Args:
         prim: the primitive.

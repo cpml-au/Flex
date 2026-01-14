@@ -106,7 +106,7 @@ master_doc = "index"
 
 # General information about the project.
 project = "flex"
-copyright = "2023, Alessandro Lucantonio"
+copyright = "2023, Computational Physics and Machine Learning Lab"
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the
