@@ -14,6 +14,7 @@ import os
 import pytest
 from flex.gp.util import load_config_data
 from flex.gp.primitives import add_primitives_to_pset_from_dict
+import jax.numpy as jnp
 
 # choose precision and whether to use GPU or CPU
 # needed for context of the plots at the end of the evolution
@@ -48,11 +49,11 @@ def eval_MSE_sol(
     # objective: squared norm of the residual of the equation + penalty on Dirichlet
     # boundary condition on the first node
     def obj(x, y):
-        penalty = 100.0 * x[0] ** 2
+        penalty = 100.0 / 2 * (x[0] ** 2 + (x[-1] - 1) ** 2)
         u = C.CochainP0(S, x)
         f = C.CochainP0(S, y)
-        r = residual(u, f)
-        total_energy = C.inner(r, r) + penalty
+        r = residual(u, f).coeffs.flatten()[1:-1]
+        total_energy = jnp.linalg.norm(r) ** 2 + penalty
         return total_energy
 
     prb = oc.OptimizationProblem(dim=num_nodes, state_dim=num_nodes, objfun=obj)
