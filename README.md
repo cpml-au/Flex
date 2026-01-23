@@ -184,3 +184,13 @@ regression problem.
     journal = {Machine Learning: Science and Technology}
 }
 ```
+
+## FAQ
+
+1. **How do you optimize the constants if the fitness is non-differentiable?**
+
+   In this case, we can use gradient-free optimizer, for example the evolutionary strategies. Using `pygmo` one may use, for example, the `pso` or `sea` algorithm.
+
+2. **What are the most impactful hyperparameters to tune?**
+
+   According to our experience, usually it is very important to tune `num_individuals`, `generations`, `num_islands` and `reg_param`.
