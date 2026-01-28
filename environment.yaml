@@ -22,7 +22,7 @@ dependencies:
   - pip:
       - git+https://github.com/cpml-au/dctkit
       - git+https://github.com/cpml-au/deap
-      - ray
+      - "ray[default]"
       - pygmsh
       - tox
       - mygrad
