@@ -1,4 +1,4 @@
-[![Documentation Status](https://readthedocs.org/projects/alpine/badge/?version=latest)](https://alpine.readthedocs.io/en/latest/?badge=latest)
+[![Documentation Status](https://readthedocs.org/projects/flexgp/badge/?version=latest)](https://flexgp.readthedocs.io/en/latest/?badge=latest)
 
 # Flex
 
@@ -194,3 +194,7 @@ regression problem.
 2. **What are the most impactful hyperparameters to tune?**
 
    According to our experience, usually it is very important to tune `num_individuals`, `generations`, `num_islands` and `reg_param`.
+
+3. **Is it possible to get the best individuals in a sympy format?**
+
+   Yes, but only for standard algebraic symbolic regression, by using the class method `get_best_individual_sympy`
