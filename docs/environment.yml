@@ -21,6 +21,7 @@ dependencies:
   - pygraphviz
   - pip
   - pip:
+      - nbsphinx
       - sphinx-rtd-theme
       - myst-parser[linkify]
       - sphinx>=3.2.1
