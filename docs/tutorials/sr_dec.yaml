@@ -24,7 +24,8 @@ gp:
     fun: gp.cxOnePoint
     kargs: "{}"
   primitives:
-    imports: { "flex.gp.cochain_primitives": ["coch_primitives"] }
+    imports: { "flex.gp.cochain_primitives": ["coch_primitives"],
+              "flex.gp.jax_primitives": ["jax_primitives"]}
     used:
       [
         { "name": "AddF", "dimension": None, "rank": None },
