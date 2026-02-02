@@ -4,7 +4,6 @@ import numpy as np
 import operator
 from typing import List, Dict, Callable
 from os.path import join
-from flex.data import Dataset
 import os
 import ray
 import random
@@ -15,6 +14,8 @@ from sklearn.utils.validation import check_is_fitted, validate_data
 from sympy.parsing.sympy_parser import parse_expr
 from functools import partial
 from itertools import chain
+import numpy.typing as npt
+from jax import Array
 
 
 # reducing the number of threads launched by fitness evaluations
@@ -49,7 +50,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         fitness: fitness evaluation function. It must return a tuple containing a
             single scalar fitness value, e.g. `(fitness_value,)`.
         predict_func: function that returns a prediction given an individual and
-            a test `Dataset` as inputs.
+            a test dataset as inputs.
         score_func: error metric used for validation and for the `score` method
             (e.g. mean squared error).
         select_fun: string representing the selection operator to use.
@@ -279,7 +280,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         """
         self.__store_shared_objects("common", data)
 
-    def __store_datasets(self, datasets: Dict[str, Dataset]):
+    def __store_datasets(self, datasets: Dict[str, npt.NDArray | Array]):
         """Store datasets with the corresponding label ("train", "val" or "test")
         in the common object space. The datasets are passed as parameters to
         the fitness, and possibly to the error metric and the prediction functions.
@@ -287,7 +288,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         Args:
             datasets: the keys are 'train', 'val' and 'test' denoting the training,
                 the validation and the test datasets, respectively. The associated
-                values are `Dataset` objects.
+                values are numpy or jax arrays.
         """
         for dataset_label, dataset_data in datasets.items():
             self.__store_shared_objects(dataset_label, dataset_data)
