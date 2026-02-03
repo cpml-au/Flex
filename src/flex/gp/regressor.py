@@ -660,8 +660,10 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         # Update history of best fitness and best validation error
         self.__train_fit_history = self.__logbook.chapters["fitness"].select("min")
         if self.validate:
-            self.val_fit_history = self.__logbook.chapters["valid"].select("valid_err")
-            self.min_valerr = min(self.val_fit_history)
+            self.__val_fit_history = self.__logbook.chapters["valid"].select(
+                "valid_err"
+            )
+            self.min_valerr = min(self.__val_fit_history)
 
         self._best = best_inds[0]
 
@@ -772,7 +774,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
     def __save_train_fit_history(self, output_path: str):
         np.save(join(output_path, "train_fit_history.npy"), self.__train_fit_history)
         if self.validate:
-            np.save(join(output_path, "val_fit_history.npy"), self.val_fit_history)
+            np.save(join(output_path, "val_fit_history.npy"), self.__val_fit_history)
 
     def get_best_individual_sympy(self):
         """Return the SymPy expression of the best individual.
@@ -786,6 +788,9 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
 
     def get_train_fit_history(self):
         return self.__train_fit_history
+
+    def get_val_fit_history(self):
+        return self.__val_fit_history
 
     def get_last_gen(self):
         return self.__last_gen
