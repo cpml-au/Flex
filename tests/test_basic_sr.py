@@ -30,7 +30,7 @@ def eval_MSE_sol(individual, X, y):
     MSE = None
 
     if y is not None:
-        MSE = jnp.mean(jnp.sum(jnp.square(y_pred - y)))
+        MSE = jnp.mean(jnp.square(y_pred - y))
         MSE = jnp.nan_to_num(MSE, nan=1e5)
 
     return MSE, y_pred
