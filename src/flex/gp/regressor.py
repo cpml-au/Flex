@@ -80,7 +80,12 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         common_data: dictionary of arguments shared between fitness, prediction,
           and scoring functions.
         validate: whether to use a validation dataset.
-        preprocess_func: function applied to individuals before fitness evaluation.
+        preprocess_args: configuration for a function applied to individuals prior
+          to fitness evaluation. It must contain three keys: `func`, the callable to
+          execute. It must accept an individual and the toolbox as its first two
+          arguments; `func_args`: a dictionary of additional arguments for
+          func; `callback`: a function used to assign the resulting preprocessed
+          values back to each individual.
         callback_func: function called after fitness evaluation to perform custom
             processing.
         seed_str: list of GP expressions used to seed the initial population.
@@ -130,7 +135,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         overlapping_generation: bool = False,
         common_data: Dict | None = None,
         validate: bool = False,
-        preprocess_func: Callable | None = None,
+        preprocess_args: Dict | None = None,
         callback_func: Callable | None = None,
         seed_str: List[str] | None = None,
         print_log: bool = False,
@@ -155,7 +160,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
 
         self.print_log = print_log
         self.num_best_inds_str = num_best_inds_str
-        self.preprocess_func = preprocess_func
+        self.preprocess_args = preprocess_args
         self.callback_func = callback_func
         self.save_best_individual = save_best_individual
         self.save_train_fit_history = save_train_fit_history
@@ -452,6 +457,13 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         if self.validate and self.score_func is not None:
             self.__register_val_funcs(toolbox)
 
+        if self.preprocess_args is not None:
+            toolbox.register(
+                "preprocess_func",
+                self.__get_remote(self.preprocess_args["func"]),
+                **self.preprocess_args["func_args"],
+            )
+
         return toolbox
 
     # @_fit_context(prefer_skip_nested_validation=True)
@@ -565,8 +577,11 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
 
             num_evals += len(invalid_inds[i])
 
-            if self.preprocess_func is not None:
-                self.preprocess_func(invalid_inds[i])
+            if self.preprocess_args is not None:
+                preprocess_values = toolbox.map(
+                    toolbox.preprocess_func, invalid_inds[i]
+                )
+                self.preprocess_args["callback"](invalid_inds[i], preprocess_values)
 
         fitnesses = toolbox.map(
             toolbox.evaluate_train, self.__flatten_list(invalid_inds)
@@ -689,8 +704,10 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             self.__remove_duplicates(toolbox)
             print(" DONE.", flush=True)
 
-        if self.preprocess_func is not None:
-            self.preprocess_func(self.__pop)
+        if self.preprocess_args is not None:
+            for i in range(self.num_islands):
+                preprocess_values = toolbox.map(toolbox.preprocess_func, self.__pop[i])
+                self.preprocess_args["callback"](self.__pop[i], preprocess_values)
 
     def _evaluate_init_pop(self, toolbox):
         for i in range(self.num_islands):
