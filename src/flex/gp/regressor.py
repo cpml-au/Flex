@@ -51,7 +51,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             single scalar fitness value, e.g. `(fitness_value,)`.
         predict_func: function that returns a prediction given an individual and
             a test dataset as inputs.
-        score_func: error metric used for validation and for the `score` method
+        score_func: score metric used for validation and for the `score` method
             (e.g. mean squared error).
         select_fun: string representing the selection operator to use.
         select_args: stringified dictionary of keyword arguments passed to the
@@ -316,7 +316,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         # Headers of fields to be printed during log
         if self.validate:
             self.__logbook.header = "gen", "evals", "fitness", "size", "valid"
-            self.__logbook.chapters["valid"].header = ("valid_err",)
+            self.__logbook.chapters["valid"].header = ("valid_score",)
         else:
             self.__logbook.header = "gen", "evals", "fitness", "size"
         self.__logbook.chapters["fitness"].header = "min", "avg", "max", "std"
@@ -337,10 +337,10 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
 
     def __compute_valid_stats(self, pop, toolbox):
         best = tools.selBest(pop, k=1)
-        # FIXME: ugly way of handling lists/tuples; assume eval_val_MSE returns a
+        # FIXME: ugly way of handling lists/tuples; assume evaluate_val_score returns a
         # single-valued tuple as eval_val_fit
-        valid_err = toolbox.map(toolbox.evaluate_val_MSE, best)[0]
-        return valid_err
+        valid_score = toolbox.map(toolbox.evaluate_val_score, best)[0]
+        return valid_score
 
     def get_pop_stats(self):
         pop = self.__flatten_list(self.__pop)
@@ -357,8 +357,8 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         # record the statistics in the logbook
         if self.validate:
             # compute satistics related to the validation set
-            valid_err = self.__compute_valid_stats(pop, toolbox)
-            record["valid"] = {"valid_err": valid_err}
+            valid_score = self.__compute_valid_stats(pop, toolbox)
+            record["valid"] = {"valid_score": valid_score}
 
         self.__logbook.record(gen=gen, evals=evals, **record)
 
@@ -383,7 +383,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         )
 
     def __register_val_funcs(self, toolbox):
-        """Register the functions needed for validation, i.e. the error metric and the
+        """Register the functions needed for validation, i.e. the score metric and the
         fitness function. Must be called after storing the datasets in the common
         obj space.
         """
@@ -393,7 +393,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             "evaluate_val_fit", self.__get_remote(self.fitness), **args_val
         )
         toolbox.register(
-            "evaluate_val_MSE", self.__get_remote(self.score_func), **args_val
+            "evaluate_val_score", self.__get_remote(self.score_func), **args_val
         )
 
     def __register_map(self, toolbox):
@@ -657,13 +657,13 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             if self.custom_logger is not None:
                 self.custom_logger(best_inds)
 
-        # Update history of best fitness and best validation error
+        # Update history of best fitness and best validation score
         self.__train_fit_history = self.__logbook.chapters["fitness"].select("min")
         if self.validate:
-            self.__val_fit_history = self.__logbook.chapters["valid"].select(
-                "valid_err"
+            self.__val_score_history = self.__logbook.chapters["valid"].select(
+                "valid_score"
             )
-            self.min_valerr = min(self.__val_fit_history)
+            self.min_val_score = min(self.__val_score_history)
 
         self._best = best_inds[0]
 
@@ -751,7 +751,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
 
         if self.validate:
             print(
-                f"The best error on the validation set is {self.min_valerr}",
+                f"The best score on the validation set is {self.min_val_score}",
                 flush=True,
             )
 
@@ -774,7 +774,9 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
     def __save_train_fit_history(self, output_path: str):
         np.save(join(output_path, "train_fit_history.npy"), self.__train_fit_history)
         if self.validate:
-            np.save(join(output_path, "val_fit_history.npy"), self.__val_fit_history)
+            np.save(
+                join(output_path, "val_score_history.npy"), self.__val_score_history
+            )
 
     def get_best_individual_sympy(self):
         """Return the SymPy expression of the best individual.
@@ -789,8 +791,13 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
     def get_train_fit_history(self):
         return self.__train_fit_history
 
-    def get_val_fit_history(self):
-        return self.__val_fit_history
+    def get_val_score_history(self):
+        """Returns the validation score history.
+
+        Returns:
+            list containing the validation scores at each generation.
+        """
+        return self.__val_score_history
 
     def get_last_gen(self):
         return self.__last_gen
