@@ -51,8 +51,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             single scalar fitness value, e.g. `(fitness_value,)`.
         predict_func: function that returns a prediction given an individual and
             a test dataset as inputs.
-        score_func: score metric used for validation and for the `score` method
-            (e.g. mean squared error).
+        score_func: score metric used for validation and for the `score` method.
         select_fun: string representing the selection operator to use.
         select_args: stringified dictionary of keyword arguments passed to the
             selection operator. The string is evaluated at runtime.
@@ -663,7 +662,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             self.__val_score_history = self.__logbook.chapters["valid"].select(
                 "valid_score"
             )
-            self.min_val_score = min(self.__val_score_history)
+            self.max_val_score = max(self.__val_score_history)
 
         self._best = best_inds[0]
 
@@ -751,7 +750,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
 
         if self.validate:
             print(
-                f"The best score on the validation set is {self.min_val_score}",
+                f"The best score on the validation set is {self.max_val_score}",
                 flush=True,
             )
 
