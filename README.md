@@ -198,3 +198,7 @@ regression problem.
 3. **Is it possible to get the best individuals in a sympy format?**
 
    Yes, but only for standard algebraic symbolic regression, by using the class method `get_best_individual_sympy`
+
+## Acknowledgements
+
+This work is supported by the European Union (European Research Council (ERC), ALPS, 101039481). Views and opinions expressed are however those of the author(s) only and do not necessarily reflect those of the European Union or the ERC Executive Agency. Neither the European Union nor the granting authority can be held responsible for them.
