@@ -118,7 +118,7 @@ def add_primitives_to_pset(
                 # of type_primitive (e.g. if primitive['name'] = sin and typed_primitive
                 # = arcsin, we don't want to add the primitive)
                 exact_name_check = (
-                    len(typed_primitive.replace(primitive["name"], "")) <= 2
+                    len(typed_primitive.replace(primitive["name"], "")) <= 3
                 )
                 # check if the dimension/rank of a typed primitive
                 # is admissible, i.e. if it does not coincide with a non-admissible

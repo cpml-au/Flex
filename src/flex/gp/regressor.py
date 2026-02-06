@@ -212,13 +212,19 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
 
     @property
     def n_elitist(self):
+        """Compute the number of elitists in the population"""
         return int(self.frac_elitist * self.num_individuals)
 
-    def get_params(self, deep=True):
+    def get_params(self, deep: bool = True):
         return self.__dict__
 
     def __creator_toolbox_pset_config(self):
-        """Initialize toolbox and individual creator based on config file."""
+        """Initialize toolbox and individual creator based on config file.
+
+        Returns:
+            a tuple containing the initialized toolbox and the primitive set.
+
+        """
         pset = self.pset_config
         toolbox = base.Toolbox()
 
@@ -269,6 +275,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         return toolbox, pset
 
     def __init_data_store(self):
+        """Initialize the store data dict with the common parameters."""
         self.__data_store = dict()
 
         if self.common_data is not None:
@@ -298,13 +305,30 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             self.__store_shared_objects(dataset_label, dataset_data)
 
     def __store_shared_objects(self, label: str, data: Dict):
+        """Store a dictionary of data in the internal data store, optionally
+        converting values to Ray object references for shared-memory access.
+
+        Args:
+            label: key under which the data dictionary will be stored internally.
+            data: dictionary of objects to store.
+        """
         for key, value in data.items():
             # replace each item of the dataset with its obj ref
             if not isinstance(value, ray.ObjectRef) and self.multiprocessing:
                 data[key] = ray.put(value)
         self.__data_store[label] = data
 
-    def __fetch_shared_objects(self, stored_data):
+    def __fetch_shared_objects(self, stored_data: Dict):
+        """Retrieve objects from the Ray object store and reconstruct
+        a local dictionary of concrete values.
+
+        Args:
+            stored_data: dictionary potentially containing ``ray.ObjectRef`` values.
+
+        Returns:
+            a new dictionary where all Ray object references have been
+            dereferenced into concrete Python objects.
+        """
         fetched_data = dict()
         for key, value in stored_data.items():
             if isinstance(value, ray.ObjectRef):
