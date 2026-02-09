@@ -339,7 +339,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         return fetched_data
 
     def __init_stats_log(self):
-        # Initialize logbook to collect statistics
+        """Initialize logbook to collect statistics."""
         self.__logbook = tools.Logbook()
         # Headers of fields to be printed during log
         if self.validate:
@@ -363,7 +363,16 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
 
         self.__train_fit_history = []
 
-    def __compute_valid_stats(self, pop, toolbox):
+    def __compute_valid_stats(self, pop: List, toolbox: base.Toolbox):
+        """Compute the validation score of the best individual.
+
+        Args:
+            pop: a given population.
+            toolbox: the toolbox for the evolution.
+
+        Returns:
+            the validation score.
+        """
         best = tools.selBest(pop, k=1)
         # FIXME: ugly way of handling lists/tuples; assume evaluate_val_score returns a
         # single-valued tuple as eval_val_fit
@@ -371,11 +380,19 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         return valid_score
 
     def get_pop_stats(self):
+        """Get population stats."""
         pop = self.__flatten_list(self.__pop)
         return self.__mstats.compile(pop)
 
-    def __stats(self, pop, gen, evals, toolbox):
-        """Compute and print statistics of a population."""
+    def __stats(self, pop: List, gen: int, evals: int, toolbox: base.Toolbox):
+        """Compute and print statistics of a population.
+
+        Args:
+            pop: a given population.
+            gen: the generation number.
+            evals: the number of the evaluations in the current generation.
+            toolbox: the toolbox for the evolution.
+        """
 
         # LINE_UP = '\033[1A'
         # LINE_CLEAR = '\x1b[2K'
@@ -395,7 +412,16 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             # print(LINE_UP, end=LINE_CLEAR, flush=True)
             print(self.__logbook.stream, flush=True)
 
-    def __get_remote(self, f):
+    def __get_remote(self, f: Callable):
+        """Wraps a function for parallel execution if multiprocessing is enabled.
+
+        Args:
+            f: The function to be executed, typically a task or objective function.
+
+        Returns:
+            The Ray remote handle if multiprocessing is active, otherwise the
+            original function.
+        """
         if self.multiprocessing:
             return ray.remote(num_cpus=self.num_cpus, max_calls=self.max_calls)(
                 f
@@ -403,17 +429,25 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         else:
             return f
 
-    def __register_fitness_func(self, toolbox):
+    def __register_fitness_func(self, toolbox: base.Toolbox):
+        """Register fitness function in the toolbox.
+
+        Args:
+            toolbox: the toolbox for the evolution.
+        """
         store = self.__data_store
         args_train = store["common"] | store["train"]
         toolbox.register(
             "evaluate_train", self.__get_remote(self.fitness), **args_train
         )
 
-    def __register_val_funcs(self, toolbox):
+    def __register_val_funcs(self, toolbox: base.Toolbox):
         """Register the functions needed for validation, i.e. the score metric and the
         fitness function. Must be called after storing the datasets in the common
         obj space.
+
+        Args:
+            toolbox: the toolbox for the evolution.
         """
         store = self.__data_store
         args_val = store["common"] | store["val"]
@@ -424,7 +458,12 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             "evaluate_val_score", self.__get_remote(self.score_func), **args_val
         )
 
-    def __register_map(self, toolbox):
+    def __register_map(self, toolbox: base.Toolbox):
+        """Register mapper in the toolbox.
+
+        Args:
+            toolbox: the toolbox for the evolution.
+        """
         if self.multiprocessing:
             toolbox_ref = ray.put(toolbox)
             toolbox.register(
@@ -439,7 +478,25 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
 
             toolbox.register("map", base_mapper, toolbox=toolbox)
 
-    def _prepare_fit(self, X, y, X_val, y_val):
+    def _prepare_fit(
+        self,
+        X: npt.NDArray | Array,
+        y: npt.NDArray | Array,
+        X_val: npt.NDArray | Array,
+        y_val: npt.NDArray | Array,
+    ):
+        """Prepare datasets, internal state, and the DEAP toolbox for evolution.
+
+        Args:
+            X: training input features.
+            y: training target values. Can be None for unsupervised tasks.
+            X_val: validation input features.
+            y_val: validation target values. Can be None for unsupervised tasks.
+
+        Returns:
+            a configured DEAP toolbox containing registered evaluation and
+            preprocessing functions.
+        """
         validated_data = validate_data(
             self,
             X,
@@ -491,7 +548,13 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         return toolbox
 
     # @_fit_context(prefer_skip_nested_validation=True)
-    def fit(self, X, y=None, X_val=None, y_val=None):
+    def fit(
+        self,
+        X: npt.NDArray | Array,
+        y: npt.NDArray | Array = None,
+        X_val: npt.NDArray | Array = None,
+        y_val: npt.NDArray | Array = None,
+    ):
         """Fits the training data using GP-based symbolic regression.
 
         This method initializes the populations, evaluates the fitness of the
@@ -510,7 +573,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         self.is_fitted_ = True
         return self
 
-    def predict(self, X):
+    def predict(self, X: npt.NDArray | Array):
         """Predict outputs using the best evolved individual.
 
         Args:
@@ -532,7 +595,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         ]
         return u_best
 
-    def score(self, X, y=None):
+    def score(self, X: npt.NDArray | Array, y: npt.NDArray | Array = None):
         """Compute the score of the best evolved individual.
         This method evaluates the user-provided `score_func` on the given dataset.
 
@@ -559,13 +622,30 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         score = self.score_func((self._best,), toolbox=toolbox, **args_score_func)[0]
         return score
 
-    def __flatten_list(self, nested_lst):
+    def __flatten_list(self, nested_lst: List):
+        """Convert a list of lists into a single flat list.
+
+        Args:
+            nested_lst: a list containing multiple sublists.
+
+        Returns:
+            a single list containing all elements of the sublists in order.
+        """
         flat_list = []
         for lst in nested_lst:
             flat_list += lst
         return flat_list
 
-    def __unflatten_list(self, flat_lst, lengths):
+    def __unflatten_list(self, flat_lst: List, lengths: List):
+        """Restore a flat list into a list of sublists based on provided lengths.
+
+        Args:
+            flat_lst: the single-dimensional list to be partitioned.
+            lengths: a list of integers specifying the size of each original sublist.
+
+        Returns:
+            a list of lists reconstructed to match the original structure.
+        """
         result = []
         start = 0  # Starting index of the current sublist
         for length in lengths:
@@ -575,7 +655,17 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             start = end  # Update the start index for the next sublist
         return result
 
-    def __evolve_islands(self, cgen: int, toolbox):
+    def __evolve_islands(self, cgen: int, toolbox: base.Toolbox):
+        """Performs a single iteration of the evolution pipeline with the
+        multi-islands strategy.
+
+        Args:
+            cgen: current generation index.
+            toolbox: the toolbox for the evolution.
+
+        Returns:
+            the total number of evaluations.
+        """
         num_evals = 0
 
         invalid_inds = [None] * self.num_islands
@@ -639,7 +729,12 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
 
         return num_evals
 
-    def __remove_duplicates(self, toolbox):
+    def __remove_duplicates(self, toolbox: base.Toolbox):
+        """Remove duplicates in the population.
+
+        Args:
+            toolbox: the toolbox for the evolution.
+        """
         for i in range(self.num_islands):
             while True:
                 fitnesses = toolbox.map(toolbox.evaluate_train, self.__pop[i])
@@ -666,8 +761,8 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
                 for idx in bad_indices:
                     self.__pop[i][idx] = toolbox.individual()
 
-    def get_best_individuals(self, n_ind=1):
-        """Return the best individuals across all islands.
+    def get_best_individuals(self, n_ind: int = 1):
+        """Returns the best individuals across all islands.
 
         Args:
             n_ind : number of top individuals to return.
@@ -678,7 +773,13 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         best_inds = tools.selBest(self.__flatten_list(self.__pop), k=n_ind)
         return best_inds[:n_ind]
 
-    def _step(self, toolbox, cgen):
+    def _step(self, toolbox: base.Toolbox, cgen: int):
+        """Performs a single step of the evolution pipeline.
+
+        Args:
+            toolbox: the toolbox for the evolution.
+            cgen: current generation index.
+        """
         num_evals = self.__evolve_islands(cgen, toolbox)
 
         # select the best individuals in the current population
@@ -705,7 +806,15 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
 
         self._best = best_inds[0]
 
-    def _restart(self, toolbox, save_best_inds=True):
+    def _restart(self, toolbox: base.Toolbox, save_best_inds: bool = True):
+        """Re-initializes the population while optionally preserving the best
+        individuals.
+
+        Args:
+            toolbox: the toolbox for the evolution.
+            save_best_inds: whether to keep the best individual from each island
+                in the new population. Defaults to True.
+        """
         best_inds = [None] * self.num_islands
         for i in range(self.num_islands):
             best_inds[i] = tools.selBest(self.__pop[i], k=1)[0]
@@ -713,7 +822,12 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         for i in range(self.num_islands):
             self.__pop[i][0] = best_inds[i]
 
-    def _generate_init_pop(self, toolbox):
+    def _generate_init_pop(self, toolbox: base.Toolbox):
+        """Generates the initial population.
+
+        Args:
+            toolbox: the toolbox for the evolution.
+        """
         self.__pop = [None] * self.num_islands
         for i in range(self.num_islands):
             self.__pop[i] = toolbox.population(n=self.num_individuals)
@@ -733,7 +847,12 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
                 preprocess_values = toolbox.map(toolbox.preprocess_func, self.__pop[i])
                 self.preprocess_args["callback"](self.__pop[i], preprocess_values)
 
-    def _evaluate_init_pop(self, toolbox):
+    def _evaluate_init_pop(self, toolbox: base.Toolbox):
+        """Evaluates the initial population.
+
+        Args:
+            toolbox: the toolbox for the evolution.
+        """
         for i in range(self.num_islands):
             fitnesses = toolbox.map(toolbox.evaluate_train, self.__pop[i])
 
@@ -743,7 +862,12 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
                 for ind, fit in zip(self.__pop[i], fitnesses):
                     ind.fitness.values = fit
 
-    def __run(self, toolbox):
+    def __run(self, toolbox: base.Toolbox):
+        """Performs the evolution pipeline.
+
+        Args:
+            toolbox: the toolbox for the evolution.
+        """
         print("Generating initial population(s)...", flush=True)
         self._generate_init_pop(toolbox)
         print("DONE.", flush=True)
@@ -806,12 +930,21 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         # NOTE: ray.shutdown should be manually called by the user
 
     def __save_best_individual(self, output_path: str):
-        """Saves the string of the best individual of the population in a .txt file."""
+        """Saves the string of the best individual of the population in a .txt file.
+
+        Args:
+            output_path: path where the history should be saved.
+        """
         file = open(join(output_path, "best_ind.txt"), "w")
         file.write(str(self._best))
         file.close()
 
     def __save_train_fit_history(self, output_path: str):
+        """Saves the training (and validation) history in a .npy file.
+
+        Args:
+            output_path: path where the history should be saved.
+        """
         np.save(join(output_path, "train_fit_history.npy"), self.__train_fit_history)
         if self.validate:
             np.save(
@@ -819,7 +952,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             )
 
     def get_best_individual_sympy(self):
-        """Return the SymPy expression of the best individual.
+        """Returns the SymPy expression of the best individual.
 
         Returns:
             sympy representation of the best individual if conversion is enabled.
@@ -829,6 +962,11 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             return self.__best_sympy
 
     def get_train_fit_history(self):
+        """Returns the training score history.
+
+        Returns:
+            list containing the validation scores at each generation.
+        """
         return self.__train_fit_history
 
     def get_val_score_history(self):
@@ -840,9 +978,14 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         return self.__val_score_history
 
     def get_last_gen(self):
+        """Returns the last generation index.
+
+        Returns:
+            the last generation.
+        """
         return self.__last_gen
 
-    def save_best_test_sols(self, X_test, output_path: str):
+    def save_best_test_sols(self, X_test: npt.NDArray | Array, output_path: str):
         """Compute and save the predictions corresponding to the best individual
         at the end of the evolution, evaluated over the test dataset.
 
