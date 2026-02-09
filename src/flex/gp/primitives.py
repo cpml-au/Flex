@@ -105,44 +105,31 @@ def add_primitives_to_pset(
             primitive["dimension"] = []
         if primitive["rank"] is None:
             primitive["rank"] = []
-        # save dimensions and ranks not admitted for the problem
-        non_feasible_dimensions = list(
-            set(("0", "1", "2")) - set(primitive["dimension"])
-        )
-        non_feasible_ranks = list(set(("SC", "V", "T")) - set(primitive["rank"]))
+        # construct feasible suffixes
+        feasible_suffixes = []
+        assert False
+        for dim in primitive["dimension"]:
+            for rank in primitive["rank"]:
+                feasible_suffixes.append(dim + rank.replace("SC", ""))
         # iterate over all the primitives, pre-computed and stored in the dictionary
         # primitives
         for typed_primitive in primitives_collection.keys():
-            if primitive["name"] in typed_primitive:
-                # remove the case in which the name of the primitive is a subname
-                # of type_primitive (e.g. if primitive['name'] = sin and typed_primitive
-                # = arcsin, we don't want to add the primitive)
-                exact_name_check = (
-                    len(typed_primitive.replace(primitive["name"], "")) <= 3
-                )
-                # check if the dimension/rank of a typed primitive
-                # is admissible, i.e. if it does not coincide with a non-admissible
-                # dimension/rank
-                # FIXME: change this!
-                check_wrong_dim_primal = sum(
-                    [
-                        typed_primitive.count("P" + obj)
-                        for obj in non_feasible_dimensions
-                    ]
-                )
-                check_wrong_dim_dual = sum(
-                    [
-                        typed_primitive.count("D" + obj)
-                        for obj in non_feasible_dimensions
-                    ]
-                )
-                check_rank = sum(
-                    [typed_primitive.count("P" + obj) for obj in non_feasible_ranks]
-                )
-                check_wrong_dim_rank = (
-                    check_wrong_dim_primal + check_wrong_dim_dual + check_rank
-                )
-                if check_wrong_dim_rank == 0 and exact_name_check:
+            # first check if the actual primitive should be added or not
+            replacements = ["P", "D", "0", "1", "2", "V", "T"]
+            true_name = typed_primitive[:]
+            print(true_name, typed_primitive, feasible_suffixes)
+            for replacement in replacements:
+                # NOTE: work only on the last part of the string, because
+                # primal/dual and rank info are there
+                true_name = true_name[:1] + true_name[1:].replace(replacement, "")
+            if primitive["name"] == true_name:
+                # extract info regarding dim and rank
+                prim_info = typed_primitive.replace(true_name, "")
+                # the first value is primal/dual, we dont need it
+                prim_info = prim_info[1:]
+                # either prim_info is in feasible_suffixes or for scalar primitives
+                # feasible_suffixes = []
+                if prim_info in feasible_suffixes or len(feasible_suffixes) == 0:
                     op = primitives_collection[typed_primitive].op
                     in_types = primitives_collection[typed_primitive].in_types
                     out_type = primitives_collection[typed_primitive].out_type
