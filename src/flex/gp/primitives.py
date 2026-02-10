@@ -100,14 +100,13 @@ def add_primitives_to_pset(
             ranks of the primitive input (or None if a scalar primitive is considered).
     """
     for primitive in primitives_to_add:
-        # pre-process scalar primitives
-        if primitive["dimension"] is None:
+        # pre-process scalar primitives -> dimension, rank = "None" (str is important)
+        if primitive["dimension"] == "None":
             primitive["dimension"] = []
-        if primitive["rank"] is None:
+        if primitive["rank"] == "None":
             primitive["rank"] = []
         # construct feasible suffixes
         feasible_suffixes = []
-        assert False
         for dim in primitive["dimension"]:
             for rank in primitive["rank"]:
                 feasible_suffixes.append(dim + rank.replace("SC", ""))
