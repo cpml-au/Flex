@@ -1,24 +1,120 @@
 from deap.gp import PrimitiveSetTyped
-from typing import List, Dict, Callable, Tuple
+from typing import List, Dict, Callable, Tuple, Type
 from importlib import import_module
+import itertools
 
 
 def switch_category(categories: Tuple, category: str):
+    """Swith category given a tuple of 2 categories (primal/dual).
+    Args:
+        categories: a tuple of 2 categories.
+        category: a category.
+
+    Returns:
+        the other category.
+    """
     switched_category_list = list(set(categories) - set(category))
     return str(switched_category_list[0])
 
 
 class PrimitiveParams:
-    def __init__(self, op, in_types, out_type) -> None:
+    """A simple class to handle a primitive function.
+
+    Args:
+        op: the callable function.
+        in_types: input types of the primitive.
+        out_type: output type of the primitive.
+    """
+
+    def __init__(self, op: Callable, in_types: Type, out_type: Type):
         self.op = op
         self.in_types = in_types
         self.out_type = out_type
 
 
+def define_eval_with_suitable_imports(imports: Dict):
+    """Creates a scoped evaluation function with pre-loaded modules.
+
+    This prevents repetitive imports and ensures that string-based type
+    definitions (like "IntP1V") can be converted into actual class
+    references during GP tree construction.
+
+    Args:
+        imports: A dictionary where keys are module paths and values
+            are lists of function/class names to import.
+
+    Returns:
+        A function `eval_with_globals(expression)` that evaluates strings
+        within the context of the imported components.
+    """
+    custom_globals = {}
+    for module_name, function_names in imports.items():
+        module = import_module(module_name)
+        for function_name in function_names:
+            custom_globals[function_name] = getattr(module, function_name)
+
+    def eval_with_globals(expression):
+        return eval(expression, custom_globals)
+
+    return eval_with_globals
+
+
+def compute_primitive_in_out_type(
+    primitive, eval_with_globals, in_category, in_dim, in_rank
+):
+    """Resolves the specific variant name and types for a primitive.
+
+    Based on the input category (Primal/Dual), dimension (0, 1, 2), and
+    rank (Scalar, Vector, Tensor), this function generates a unique name
+    for the primitive variant, resolves the Python types for all input
+    arguments, and calculates the resulting output type using defined
+    mapping rules.
+
+    Args:
+        primitive: the base primitive configuration dictionary, see the
+            documentation of `generate_primitive_variants`
+        eval_with_globals: The evaluation function created by
+            `define_eval_with_suitable_imports`.
+        in_category: The current category ('P' or 'D').
+        in_dim: The current dimension as a string.
+        in_rank: The current rank (e.g., 'SC', 'V', 'T').
+
+    Returns:
+        A tuple containing the concatenated name (e.g., "addP1V"),
+            a list of resolved Python type objects for inputs and the
+            resolved Python type object for the output.
+    """
+    # # compute the primitive name taking into account
+    # # the right category, dim and rank
+    base_primitive = primitive["fun_info"]
+    map_rule = primitive["map_rule"]
+
+    in_rank = in_rank.replace("SC", "")
+    primitive_name = base_primitive["name"] + in_category + in_dim + in_rank
+    in_type_name = []
+    # compute the input type list
+    for i, input in enumerate(primitive["input"]):
+        # float type must be handled separately
+        if input == "float":
+            in_type_name.append(input)
+        elif len(in_rank) == 2:
+            # in this case the correct rank must be taken
+            in_type_name.append(input + in_category + in_dim + in_rank[i])
+        else:
+            in_type_name.append(input + in_category + in_dim + in_rank)
+    in_type = list(map(eval_with_globals, in_type_name))
+    out_category = map_rule["category"](in_category)
+    out_dim = str(map_rule["dimension"](int(in_dim)))
+    out_rank = map_rule["rank"](in_rank)
+    out_type_name = primitive["output"] + out_category + out_dim + out_rank
+    out_type = eval_with_globals(out_type_name)
+    return primitive_name, in_type, out_type
+
+
 def generate_primitive_variants(
     primitive: Dict[str, Dict[str, Callable] | List[str] | str | Dict],
     imports: Dict = None,
-) -> Dict:
+):
     """Generate primitive variants given a typed primitive.
 
     Args:
@@ -42,100 +138,88 @@ def generate_primitive_variants(
     """
     base_primitive = primitive["fun_info"]
     in_attribute = primitive["att_input"]
-    map_rule = primitive["map_rule"]
     primitive_dictionary = dict()
 
     # Dynamically import modules and functions needed to eval input/output types
-    custom_globals = {}
-    for module_name, function_names in imports.items():
-        module = import_module(module_name)
-        for function_name in function_names:
-            custom_globals[function_name] = getattr(module, function_name)
+    eval_with_globals = define_eval_with_suitable_imports(imports)
 
-    def eval_with_globals(expression):
-        return eval(expression, custom_globals)
+    # Create an iterator for all combinations
+    combinations = itertools.product(
+        in_attribute["category"], in_attribute["dimension"], in_attribute["rank"]
+    )
 
-    for in_category in in_attribute["category"]:
-        for in_dim in in_attribute["dimension"]:
-            for in_rank in in_attribute["rank"]:
-                # compute the primitive name taking into account
-                # the right category, dim and rank
-                in_rank = in_rank.replace("SC", "")
-                primitive_name = base_primitive["name"] + in_category + in_dim + in_rank
-                in_type_name = []
-                # compute the input type list
-                for i, input in enumerate(primitive["input"]):
-                    # float type must be handled separately
-                    if input == "float":
-                        in_type_name.append(input)
-                    elif len(in_rank) == 2:
-                        # in this case the correct rank must be taken
-                        in_type_name.append(input + in_category + in_dim + in_rank[i])
-                    else:
-                        in_type_name.append(input + in_category + in_dim + in_rank)
-                in_type = list(map(eval_with_globals, in_type_name))
-                out_category = map_rule["category"](in_category)
-                out_dim = str(map_rule["dimension"](int(in_dim)))
-                out_rank = map_rule["rank"](in_rank)
-                out_type_name = primitive["output"] + out_category + out_dim + out_rank
-                out_type = eval_with_globals(out_type_name)
-                primitive_dictionary[primitive_name] = PrimitiveParams(
-                    base_primitive["fun"], in_type, out_type
-                )
+    for in_cat, in_dim, in_rank in combinations:
+        primitive_name, in_type, out_type = compute_primitive_in_out_type(
+            primitive, eval_with_globals, in_cat, in_dim, in_rank
+        )
+        primitive_dictionary[primitive_name] = PrimitiveParams(
+            base_primitive["fun"], in_type, out_type
+        )
     return primitive_dictionary
 
 
+def get_true_name(typed_name: str) -> str:
+    """Extracts the base name by removing P/D and rank/dim indicators."""
+    replacements = ["P", "D", "0", "1", "2", "V", "T"]
+    # Preserve the first character, clean the rest of the suffix
+    suffix_part = typed_name[1:]
+    for r in replacements:
+        suffix_part = suffix_part.replace(r, "")
+    return typed_name[0] + suffix_part
+
+
 def add_primitives_to_pset(
-    pset: PrimitiveSetTyped, primitives_to_add: list, primitives_collection: dict
+    pset: PrimitiveSetTyped, primitives_to_add: List[Dict], primitives_collection: Dict
 ):
     """Add a given list of primitives to a given PrimitiveSet.
 
     Args:
         pset: a primitive set.
-        pset_primitives: list of primitives to be added. Each primitive is encoded
+        primitives_to_add: list of primitives to be added. Each primitive is encoded
             as a dictionary composed of three keys: 'name', containing the name of
             the general primitive (e.g. cob for the coboundary); dimension', containing
             a list of the possible dimensions of the primitive input (or None if a
             scalar primitive is considered); 'rank', containing a list of the possible
             ranks of the primitive input (or None if a scalar primitive is considered).
+        primitives_collection: a dictionary containing all the pre-defined primitives.
     """
-    for primitive in primitives_to_add:
-        # pre-process scalar primitives -> dimension, rank = "None" (str is important)
-        if primitive["dimension"] == "None":
-            primitive["dimension"] = []
-        if primitive["rank"] == "None":
-            primitive["rank"] = []
-        # construct feasible suffixes
-        feasible_suffixes = []
-        for dim in primitive["dimension"]:
-            for rank in primitive["rank"]:
-                feasible_suffixes.append(dim + rank.replace("SC", ""))
-        # iterate over all the primitives, pre-computed and stored in the dictionary
-        # primitives
-        for typed_primitive in primitives_collection.keys():
-            # first check if the actual primitive should be added or not
-            replacements = ["P", "D", "0", "1", "2", "V", "T"]
-            true_name = typed_primitive[:]
-            print(true_name, typed_primitive, feasible_suffixes)
-            for replacement in replacements:
-                # NOTE: work only on the last part of the string, because
-                # primal/dual and rank info are there
-                true_name = true_name[:1] + true_name[1:].replace(replacement, "")
-            if primitive["name"] == true_name:
-                # extract info regarding dim and rank
-                prim_info = typed_primitive.replace(true_name, "")
-                # the first value is primal/dual, we dont need it
-                prim_info = prim_info[1:]
-                # either prim_info is in feasible_suffixes or for scalar primitives
-                # feasible_suffixes = []
-                if prim_info in feasible_suffixes or len(feasible_suffixes) == 0:
-                    op = primitives_collection[typed_primitive].op
-                    in_types = primitives_collection[typed_primitive].in_types
-                    out_type = primitives_collection[typed_primitive].out_type
-                    pset.addPrimitive(op, in_types, out_type, name=typed_primitive)
+
+    for entry in primitives_to_add:
+        # Normalize "None" strings to empty lists
+        dims = entry["dimension"] if entry["dimension"] != "None" else []
+        ranks = entry["rank"] if entry["rank"] != "None" else []
+
+        # Build suffixes: e.g., '0' + 'V' -> '0V'
+        feasible_suffixes = {
+            f"{d}{r.replace('SC', '')}" for d, r in itertools.product(dims, ranks)
+        }
+
+        for typed_name, params in primitives_collection.items():
+            true_name = get_true_name(typed_name)
+
+            if entry["name"] == true_name:
+                # Get the part after the true name (e.g., 'P0V' -> 'P0V')
+                # Then skip the first char (Primal/Dual) to get the dim/rank suffix
+                suffix_info = typed_name.replace(true_name, "")[1:]
+
+                if not feasible_suffixes or suffix_info in feasible_suffixes:
+                    pset.addPrimitive(
+                        params.op, params.in_types, params.out_type, name=typed_name
+                    )
 
 
-def add_primitives_to_pset_from_dict(pset, primitives_dict):
+def add_primitives_to_pset_from_dict(pset: PrimitiveSetTyped, primitives_dict: Dict):
+    """Add a given set of primitives to a PrimitiveSetTyped object.
+
+    Args:
+        pset: a primitive set.
+        primitives_dict: a dictionary composed of two keys: `imports`, containing the
+          import location of the pre-defined primitives; `used`, containing a list of
+          dictionaries (of the same structure as the one in `add_primitives_to_pset`).
+
+    Returns:
+        the updated primitive set
+    """
     primitives_collection = dict()
     imports = primitives_dict["imports"].items()
 
