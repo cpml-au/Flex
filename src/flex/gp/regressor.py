@@ -338,6 +338,15 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
 
         return fetched_data
 
+    def __print(self, message: str):
+        """Helper to handle conditional printing.
+
+        Args:
+            message: message to print.
+        """
+        if self.print_log:
+            print(message, flush=True)
+
     def __init_stats_log(self):
         """Initialize logbook to collect statistics."""
         self.__logbook = tools.Logbook()
@@ -834,13 +843,13 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
 
         # Seeds the first island with individuals
         if self.seed_str is not None:
-            print(" Seeding population with individuals...", flush=True)
+            self.__print(" Seeding population with individuals...")
             self.__pop[0][: len(self.seed_ind)] = self.seed_ind
 
         if self.remove_init_duplicates:
-            print(" Removing duplicates from initial population(s)...", flush=True)
+            self.__print(" Removing duplicates from initial population(s)...")
             self.__remove_duplicates(toolbox)
-            print(" DONE.", flush=True)
+            self.__print(" DONE.")
 
         if self.preprocess_args is not None:
             for i in range(self.num_islands):
@@ -868,19 +877,20 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         Args:
             toolbox: the toolbox for the evolution.
         """
-        print("Generating initial population(s)...", flush=True)
+
+        self.__print("Generating initial population(s)...")
         self._generate_init_pop(toolbox)
-        print("DONE.", flush=True)
+        self.__print("DONE.")
 
         # Evaluate the fitness of the entire population on the training set
-        print("Evaluating initial population(s)...", flush=True)
+        self.__print("Evaluating initial population(s)...")
         self._evaluate_init_pop(toolbox)
-        print("DONE.", flush=True)
+        self.__print("DONE.")
 
         if self.validate:
-            print("Using validation dataset.", flush=True)
+            self.__print("Using validation dataset.")
 
-        print(" -= START OF EVOLUTION =- ", flush=True)
+        self.__print(" -= START OF EVOLUTION =- ")
 
         for gen in range(self.generations):
             self.__cgen = gen + 1
@@ -888,10 +898,10 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             self._step(toolbox, self.__cgen)
 
             if self._best.fitness.values[0] <= 1e-15:
-                print("Fitness threshold reached - STOPPING.")
+                self.__print("Fitness threshold reached - STOPPING.")
                 break
 
-        print(" -= END OF EVOLUTION =- ", flush=True)
+        self.__print(" -= END OF EVOLUTION =- ")
 
         self.__last_gen = self.__cgen
 
@@ -906,26 +916,24 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         else:
             best_str = self._best
 
-        print(f"The best individual is {best_str}", flush=True)
+        self.__print(f"The best individual is {best_str}")
 
-        print(
-            f"The best fitness on the training set is {self.__train_fit_history[-1]}",
-            flush=True,
+        self.__print(
+            f"The best fitness on the training set is {self.__train_fit_history[-1]}"
         )
 
         if self.validate:
-            print(
-                f"The best score on the validation set is {self.max_val_score}",
-                flush=True,
+            self.__print(
+                f"The best score on the validation set is {self.max_val_score}"
             )
 
         if self.save_best_individual and self.output_path is not None:
             self.__save_best_individual(self.output_path)
-            print("String of the best individual saved to disk.", flush=True)
+            self.__print("String of the best individual saved to disk.")
 
         if self.save_train_fit_history and self.output_path is not None:
             self.__save_train_fit_history(self.output_path)
-            print("Training fitness history saved to disk.", flush=True)
+            self.__print("Training fitness history saved to disk.")
 
         # NOTE: ray.shutdown should be manually called by the user
 

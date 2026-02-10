@@ -158,8 +158,15 @@ def generate_primitive_variants(
     return primitive_dictionary
 
 
-def get_true_name(typed_name: str) -> str:
-    """Extracts the base name by removing P/D and rank/dim indicators."""
+def get_true_name(typed_name: str):
+    """Extracts the base name by removing P/D and rank/dim indicators.
+
+    Args:
+        typed_name: the full name of the primitive (e.g., "St1D1V").
+
+    Returns:
+        the base name of the primitive (e.g., St1).
+    """
     replacements = ["P", "D", "0", "1", "2", "V", "T"]
     # Preserve the first character, clean the rest of the suffix
     suffix_part = typed_name[1:]
