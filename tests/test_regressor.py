@@ -21,14 +21,14 @@ def test_check_regressor():
     primitives = {
         "imports": {"flex.gp.numpy_primitives": ["numpy_primitives"]},
         "used": [
-            {"name": "add", "dimension": None, "rank": None},
-            {"name": "sub", "dimension": None, "rank": None},
-            {"name": "mul", "dimension": None, "rank": None},
-            {"name": "div", "dimension": None, "rank": None},
-            {"name": "sin", "dimension": None, "rank": None},
-            {"name": "cos", "dimension": None, "rank": None},
-            {"name": "exp", "dimension": None, "rank": None},
-            {"name": "log", "dimension": None, "rank": None},
+            {"name": "add", "dimension": "None", "rank": "None"},
+            {"name": "sub", "dimension": "None", "rank": "None"},
+            {"name": "mul", "dimension": "None", "rank": "None"},
+            {"name": "div", "dimension": "None", "rank": "None"},
+            {"name": "sin", "dimension": "None", "rank": "None"},
+            {"name": "cos", "dimension": "None", "rank": "None"},
+            {"name": "exp", "dimension": "None", "rank": "None"},
+            {"name": "log", "dimension": "None", "rank": "None"},
         ],
     }
 
