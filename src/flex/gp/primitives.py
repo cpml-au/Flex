@@ -144,7 +144,7 @@ def generate_primitive_variants(
     return primitive_dictionary
 
 
-def get_true_name(typed_name: str):
+def get_base_name(typed_name: str):
     """Extracts the base name by removing P/D and rank/dim indicators.
 
     Args:
@@ -193,7 +193,7 @@ def add_primitives_to_pset_from_dict(pset: PrimitiveSetTyped, primitives_dict: D
         }
 
         for typed_name, params in primitives_collection.items():
-            true_name = get_true_name(typed_name)
+            true_name = get_base_name(typed_name)
 
             if entry["name"] == true_name:
                 # Get the part after the true name (e.g., 'P0V' -> 'P0V')
