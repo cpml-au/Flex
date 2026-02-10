@@ -2,7 +2,8 @@ from dctkit.dec import cochain as C
 import operator
 from functools import partial
 import jax.numpy
-from .primitives import switch_category, generate_primitive_variants
+from .primitives import generate_primitive_variants
+from typing import Tuple
 
 # Define the modules and functions needed to eval inputs and outputs
 modules_functions = {"dctkit.dec": ["cochain"]}
@@ -15,18 +16,31 @@ def inv_scalar_mul(c, f):
         return C.scalar_mul(c, jax.numpy.nan)
 
 
+def switch_complex(complexes: Tuple, complex: str):
+    """Swith complex given a tuple of 2 complexes (primal/dual).
+    Args:
+        complexes: a tuple of 2 complexes (primal/dual).
+        complex: a complex.
+
+    Returns:
+        the other complex.
+    """
+    switched_complex_list = list(set(complexes) - set(complex))
+    return str(switched_complex_list[0])
+
+
 # define cochain primitives
 add_coch = {
     "fun_info": {"name": "AddC", "fun": C.add},
     "input": ["cochain.Cochain", "cochain.Cochain"],
     "output": "cochain.Cochain",
     "att_input": {
-        "category": ("P", "D"),
+        "complex": ("P", "D"),
         "dimension": ("0", "1", "2"),
         "rank": ("SC", "V", "T"),
     },
     "map_rule": {
-        "category": lambda x: x,
+        "complex": lambda x: x,
         "dimension": lambda x: x,
         "rank": lambda x: x,
     },
@@ -36,12 +50,12 @@ sub_coch = {
     "input": ["cochain.Cochain", "cochain.Cochain"],
     "output": "cochain.Cochain",
     "att_input": {
-        "category": ("P", "D"),
+        "complex": ("P", "D"),
         "dimension": ("0", "1", "2"),
         "rank": ("SC", "V", "T"),
     },
     "map_rule": {
-        "category": lambda x: x,
+        "complex": lambda x: x,
         "dimension": lambda x: x,
         "rank": lambda x: x,
     },
@@ -51,12 +65,12 @@ coboundary = {
     "input": ["cochain.Cochain"],
     "output": "cochain.Cochain",
     "att_input": {
-        "category": ("P", "D"),
+        "complex": ("P", "D"),
         "dimension": ("0", "1"),
         "rank": ("SC", "V", "T"),
     },
     "map_rule": {
-        "category": lambda x: x,
+        "complex": lambda x: x,
         "dimension": partial(operator.add, 1),
         "rank": lambda x: x,
     },
@@ -66,12 +80,12 @@ codifferential = {
     "input": ["cochain.Cochain"],
     "output": "cochain.Cochain",
     "att_input": {
-        "category": ("P", "D"),
+        "complex": ("P", "D"),
         "dimension": ("1", "2"),
         "rank": ("SC", "V", "T"),
     },
     "map_rule": {
-        "category": lambda x: x,
+        "complex": lambda x: x,
         "dimension": partial(operator.add, -1),
         "rank": lambda x: x,
     },
@@ -80,9 +94,9 @@ tr_coch = {
     "fun_info": {"name": "tr", "fun": C.trace},
     "input": ["cochain.Cochain"],
     "output": "cochain.Cochain",
-    "att_input": {"category": ("P", "D"), "dimension": ("0", "1", "2"), "rank": ("T",)},
+    "att_input": {"complex": ("P", "D"), "dimension": ("0", "1", "2"), "rank": ("T",)},
     "map_rule": {
-        "category": lambda x: x,
+        "complex": lambda x: x,
         "dimension": lambda x: x,
         "rank": lambda x: "",
     },
@@ -92,12 +106,12 @@ mul_FT = {
     "input": ["cochain.Cochain", "float"],
     "output": "cochain.Cochain",
     "att_input": {
-        "category": ("P", "D"),
+        "complex": ("P", "D"),
         "dimension": ("0", "1", "2"),
         "rank": ("SC", "V", "T"),
     },
     "map_rule": {
-        "category": lambda x: x,
+        "complex": lambda x: x,
         "dimension": lambda x: x,
         "rank": lambda x: x,
     },
@@ -107,12 +121,12 @@ inv_mul_FT = {
     "input": ["cochain.Cochain", "float"],
     "output": "cochain.Cochain",
     "att_input": {
-        "category": ("P", "D"),
+        "complex": ("P", "D"),
         "dimension": ("0", "1", "2"),
         "rank": ("SC", "V", "T"),
     },
     "map_rule": {
-        "category": lambda x: x,
+        "complex": lambda x: x,
         "dimension": lambda x: x,
         "rank": lambda x: x,
     },
@@ -122,12 +136,12 @@ mul_coch = {
     "input": ["cochain.Cochain", "cochain.Cochain"],
     "output": "cochain.Cochain",
     "att_input": {
-        "category": ("P", "D"),
+        "complex": ("P", "D"),
         "dimension": ("0", "1", "2"),
         "rank": ("SC",),
     },
     "map_rule": {
-        "category": lambda x: x,
+        "complex": lambda x: x,
         "dimension": lambda x: x,
         "rank": lambda x: x,
     },
@@ -136,9 +150,9 @@ tran_coch = {
     "fun_info": {"name": "tran", "fun": C.transpose},
     "input": ["cochain.Cochain"],
     "output": "cochain.Cochain",
-    "att_input": {"category": ("P", "D"), "dimension": ("0", "1", "2"), "rank": ("T",)},
+    "att_input": {"complex": ("P", "D"), "dimension": ("0", "1", "2"), "rank": ("T",)},
     "map_rule": {
-        "category": lambda x: x,
+        "complex": lambda x: x,
         "dimension": lambda x: x,
         "rank": lambda x: x,
     },
@@ -147,9 +161,9 @@ sym_coch = {
     "fun_info": {"name": "sym", "fun": C.sym},
     "input": ["cochain.Cochain"],
     "output": "cochain.Cochain",
-    "att_input": {"category": ("P", "D"), "dimension": ("0", "1", "2"), "rank": ("T",)},
+    "att_input": {"complex": ("P", "D"), "dimension": ("0", "1", "2"), "rank": ("T",)},
     "map_rule": {
-        "category": lambda x: x,
+        "complex": lambda x: x,
         "dimension": lambda x: x,
         "rank": lambda x: x,
     },
@@ -159,12 +173,12 @@ star_1 = {
     "input": ["cochain.Cochain"],
     "output": "cochain.Cochain",
     "att_input": {
-        "category": ("P", "D"),
+        "complex": ("P", "D"),
         "dimension": ("0", "1"),
         "rank": ("SC", "V", "T"),
     },
     "map_rule": {
-        "category": partial(switch_category, ("P", "D")),
+        "complex": partial(switch_complex, ("P", "D")),
         "dimension": partial(lambda x, y: y - x, y=1),
         "rank": lambda x: x,
     },
@@ -174,12 +188,12 @@ star_2 = {
     "input": ["cochain.Cochain"],
     "output": "cochain.Cochain",
     "att_input": {
-        "category": ("P", "D"),
+        "complex": ("P", "D"),
         "dimension": ("0", "1", "2"),
         "rank": ("SC", "V", "T"),
     },
     "map_rule": {
-        "category": partial(switch_category, ("P", "D")),
+        "complex": partial(switch_complex, ("P", "D")),
         "dimension": partial(lambda x, y: y - x, y=2),
         "rank": lambda x: x,
     },
@@ -189,12 +203,12 @@ inner_product = {
     "input": ["cochain.Cochain", "cochain.Cochain"],
     "output": "float",
     "att_input": {
-        "category": ("P", "D"),
+        "complex": ("P", "D"),
         "dimension": ("0", "1", "2"),
         "rank": ("SC", "V", "T"),
     },
     "map_rule": {
-        "category": lambda x: "",
+        "complex": lambda x: "",
         "dimension": lambda x: "",
         "rank": lambda x: "",
     },
@@ -204,12 +218,12 @@ sin_coch = {
     "input": ["cochain.Cochain"],
     "output": "cochain.Cochain",
     "att_input": {
-        "category": ("P", "D"),
+        "complex": ("P", "D"),
         "dimension": ("0", "1", "2"),
         "rank": ("SC", "V", "T"),
     },
     "map_rule": {
-        "category": lambda x: x,
+        "complex": lambda x: x,
         "dimension": lambda x: x,
         "rank": lambda x: x,
     },
@@ -219,12 +233,12 @@ arcsin_coch = {
     "input": ["cochain.Cochain"],
     "output": "cochain.Cochain",
     "att_input": {
-        "category": ("P", "D"),
+        "complex": ("P", "D"),
         "dimension": ("0", "1", "2"),
         "rank": ("SC", "V", "T"),
     },
     "map_rule": {
-        "category": lambda x: x,
+        "complex": lambda x: x,
         "dimension": lambda x: x,
         "rank": lambda x: x,
     },
@@ -234,12 +248,12 @@ cos_coch = {
     "input": ["cochain.Cochain"],
     "output": "cochain.Cochain",
     "att_input": {
-        "category": ("P", "D"),
+        "complex": ("P", "D"),
         "dimension": ("0", "1", "2"),
         "rank": ("SC", "V", "T"),
     },
     "map_rule": {
-        "category": lambda x: x,
+        "complex": lambda x: x,
         "dimension": lambda x: x,
         "rank": lambda x: x,
     },
@@ -249,12 +263,12 @@ arccos_coch = {
     "input": ["cochain.Cochain"],
     "output": "cochain.Cochain",
     "att_input": {
-        "category": ("P", "D"),
+        "complex": ("P", "D"),
         "dimension": ("0", "1", "2"),
         "rank": ("SC", "V", "T"),
     },
     "map_rule": {
-        "category": lambda x: x,
+        "complex": lambda x: x,
         "dimension": lambda x: x,
         "rank": lambda x: x,
     },
@@ -264,12 +278,12 @@ exp_coch = {
     "input": ["cochain.Cochain"],
     "output": "cochain.Cochain",
     "att_input": {
-        "category": ("P", "D"),
+        "complex": ("P", "D"),
         "dimension": ("0", "1", "2"),
         "rank": ("SC", "V", "T"),
     },
     "map_rule": {
-        "category": lambda x: x,
+        "complex": lambda x: x,
         "dimension": lambda x: x,
         "rank": lambda x: x,
     },
@@ -279,12 +293,12 @@ log_coch = {
     "input": ["cochain.Cochain"],
     "output": "cochain.Cochain",
     "att_input": {
-        "category": ("P", "D"),
+        "complex": ("P", "D"),
         "dimension": ("0", "1", "2"),
         "rank": ("SC", "V", "T"),
     },
     "map_rule": {
-        "category": lambda x: x,
+        "complex": lambda x: x,
         "dimension": lambda x: x,
         "rank": lambda x: x,
     },
@@ -294,12 +308,12 @@ sqrt_coch = {
     "input": ["cochain.Cochain"],
     "output": "cochain.Cochain",
     "att_input": {
-        "category": ("P", "D"),
+        "complex": ("P", "D"),
         "dimension": ("0", "1", "2"),
         "rank": ("SC", "V", "T"),
     },
     "map_rule": {
-        "category": lambda x: x,
+        "complex": lambda x: x,
         "dimension": lambda x: x,
         "rank": lambda x: x,
     },
@@ -309,12 +323,12 @@ square_coch = {
     "input": ["cochain.Cochain"],
     "output": "cochain.Cochain",
     "att_input": {
-        "category": ("P", "D"),
+        "complex": ("P", "D"),
         "dimension": ("0", "1", "2"),
         "rank": ("SC", "V", "T"),
     },
     "map_rule": {
-        "category": lambda x: x,
+        "complex": lambda x: x,
         "dimension": lambda x: x,
         "rank": lambda x: x,
     },
