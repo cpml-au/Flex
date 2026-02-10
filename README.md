@@ -197,7 +197,19 @@ regression problem.
 
 3. **Is it possible to get the best individuals in a sympy format?**
 
-   Yes, but only for standard algebraic symbolic regression, by using the class method `get_best_individual_sympy`
+   Yes, but only for standard algebraic symbolic regression, by using the class method `get_best_individual_sympy`.
+
+4. **Why isn't there a pre-defined fitness/predict/score function?**
+
+   To maintain maximum _flexibility_, this library avoids "black-box" functions. While this requires a slightly more verbose setup, it ensures you have total control over the evolution logic. To get started quickly, we recommend using one of our tutorials as a foundation for your specific implementation.
+
+## Repositories using Flex
+
+The following projects leverage Flex for their evolution pipelines. If you have a project you would like to showcase, please submit a pull request with your repository details to be included in this list.
+
+- [SR-DEC_Examples](https://github.com/cpml-au/SR-DEC_Examples): benchmarks for symbolic regression paired with discrete exterior calculus.
+- [SR-Traffic](https://github.com/cpml-au/SR-Traffic): symbolic regression of fundamental diagrams of first-order traffic flow models.
+- [SR-CLF](https://github.com/cpml-au/SR-CLF): symbolic regression of Control Lyapunov Functions.
 
 ## Acknowledgements
 
