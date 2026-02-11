@@ -193,12 +193,12 @@ def add_primitives_to_pset_from_dict(pset: PrimitiveSetTyped, primitives_dict: D
         }
 
         for typed_name, params in primitives_collection.items():
-            true_name = get_base_name(typed_name)
+            base_name = get_base_name(typed_name)
 
-            if entry["name"] == true_name:
+            if entry["name"] == base_name:
                 # Get the part after the true name (e.g., 'P0V' -> 'P0V')
                 # Then skip the first char (Primal/Dual) to get the dim/rank suffix
-                suffix_info = typed_name.replace(true_name, "")[1:]
+                suffix_info = typed_name.replace(base_name, "")[1:]
 
                 if not feasible_suffixes or suffix_info in feasible_suffixes:
                     pset.addPrimitive(
