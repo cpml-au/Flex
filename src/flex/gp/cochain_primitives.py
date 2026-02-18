@@ -137,7 +137,7 @@ def compute_primitive_in_out_type(
     primitive_name = primitive.base_name + in_complex + in_dim + in_rank
     in_type_name = []
     # compute the input type list
-    for i, input in enumerate(primitive["input"]):
+    for i, input in enumerate(primitive.input):
         # float type must be handled separately
         if input == "float":
             in_type_name.append(input)
@@ -150,7 +150,7 @@ def compute_primitive_in_out_type(
     out_complex = map_rule["complex"](in_complex)
     out_dim = str(map_rule["dimension"](int(in_dim)))
     out_rank = map_rule["rank"](in_rank)
-    out_type_name = primitive["output"] + out_complex + out_dim + out_rank
+    out_type_name = primitive.output + out_complex + out_dim + out_rank
     out_type = eval_with_globals(out_type_name)
     return primitive_name, in_type, out_type
 
