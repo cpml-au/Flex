@@ -263,10 +263,13 @@ def test_primitives(set_test_dir):
         "tranD2T",
         "symD2T",
     ]
-    assert primitive_names_jax == true_primitive_names_jax
-    assert primitive_names_numpy == true_primitive_names_numpy
-    assert primitive_names_cochain_scalar == true_primitive_names_cochain_scalar
-    assert (
-        primitive_names_cochain_vector_tensor
-        == true_primitive_names_cochain_vector_tensor
+
+    # NOTE: the order of the list does not matter
+    assert set(primitive_names_jax) == set(true_primitive_names_jax)
+    assert set(primitive_names_numpy) == set(true_primitive_names_numpy)
+    assert set(primitive_names_cochain_scalar) == set(
+        true_primitive_names_cochain_scalar
+    )
+    assert set(primitive_names_cochain_vector_tensor) == set(
+        true_primitive_names_cochain_vector_tensor
     )
