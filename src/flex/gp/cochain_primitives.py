@@ -2,14 +2,58 @@ from dctkit.dec import cochain as C
 import operator
 from functools import partial
 import jax.numpy
-from .primitives import generate_primitive_variants
-from typing import Tuple
+from typing import Tuple, Callable, List, Dict
+import itertools
+from .primitives import PrimitiveParams
+from importlib import import_module
+
 
 # Define the modules and functions needed to eval inputs and outputs
 modules_functions = {"dctkit.dec": ["cochain"]}
 
 
-def inv_scalar_mul(c, f):
+class CochainBasePrimitive:
+    """A simple class to handle a cochain base primitive function.
+
+    Args:
+        base_name: name of the base primitive.
+        base_fun: callable base function.
+        input: a list containing the input types (str) of `base_fun`.
+        output: a string containing the output type of `base_fun`.
+        att_input: a dictionary with keys 'complex' (primal/dual), 'dimension' (0,1,2),
+            and 'rank' ("SC", i.e. scalar, "V", "T").
+        map_rule: a dictionary consisting of the same keys of `att_input`. In this case,
+            each key contains a callable object that provides the map to get the output
+            complex/dimension/rank given the input one.
+    """
+
+    def __init__(
+        self,
+        base_name: str,
+        base_fun: Callable,
+        input: List[str],
+        output: str,
+        att_input: Dict,
+        map_rule: Dict,
+    ):
+        self.base_name = base_name
+        self.base_fun = base_fun
+        self.input = input
+        self.output = output
+        self.att_input = att_input
+        self.map_rule = map_rule
+
+
+def inv_scalar_mul(c: C.Cochain, f: float):
+    """Scalar multiplication between a cochain and the inverse of a float.
+
+    Args:
+        c: a cochain.
+        f: a float.
+
+    Returns:
+        the scalar product between c and 1/f.
+    """
     try:
         return C.scalar_mul(c, 1 / f)
     except ZeroDivisionError:
@@ -29,310 +73,458 @@ def switch_complex(complexes: Tuple, complex: str):
     return str(switched_complex_list[0])
 
 
+def define_eval_with_suitable_imports(imports: Dict):
+    """Creates a scoped evaluation function with pre-loaded modules.
+
+    This prevents repetitive imports and ensures that string-based type
+    definitions (like "IntP1V") can be converted into actual class
+    references during GP tree construction.
+
+    Args:
+        imports: A dictionary where keys are module paths and values
+            are lists of function/class names to import.
+
+    Returns:
+        A function `eval_with_globals(expression)` that evaluates strings
+        within the context of the imported components.
+    """
+    custom_globals = {}
+    for module_name, function_names in imports.items():
+        module = import_module(module_name)
+        for function_name in function_names:
+            custom_globals[function_name] = getattr(module, function_name)
+
+    def eval_with_globals(expression):
+        return eval(expression, custom_globals)
+
+    return eval_with_globals
+
+
+def compute_primitive_in_out_type(
+    primitive: CochainBasePrimitive,
+    eval_with_globals: Callable,
+    in_complex: str,
+    in_dim: str,
+    in_rank: str,
+):
+    """Resolves the specific variant name and types for a primitive.
+
+    Based on the input complex (Primal/Dual), dimension (0, 1, 2), and
+    rank (Scalar, Vector, Tensor), this function generates a unique name
+    for the primitive variant, resolves the Python types for all input
+    arguments, and calculates the resulting output type using defined
+    mapping rules.
+
+    Args:
+        primitive: a `CochainBasePrimitive` object.
+        eval_with_globals: The evaluation function created by
+            `define_eval_with_suitable_imports`.
+        in_complex: The current complex ('P' or 'D').
+        in_dim: The current dimension as a string.
+        in_rank: The current rank (e.g., 'SC', 'V', 'T').
+
+    Returns:
+        A tuple containing the concatenated name (e.g., "addP1V"),
+            a list of resolved Python type objects for inputs and the
+            resolved Python type object for the output.
+    """
+    # # compute the primitive name taking into account
+    # # the right complex, dim and rank
+    # base_primitive = primitive["fun_info"]
+    map_rule = primitive.map_rule
+
+    in_rank = in_rank.replace("SC", "")
+    primitive_name = primitive.base_name + in_complex + in_dim + in_rank
+    in_type_name = []
+    # compute the input type list
+    for i, input in enumerate(primitive["input"]):
+        # float type must be handled separately
+        if input == "float":
+            in_type_name.append(input)
+        elif len(in_rank) == 2:
+            # in this case the correct rank must be taken
+            in_type_name.append(input + in_complex + in_dim + in_rank[i])
+        else:
+            in_type_name.append(input + in_complex + in_dim + in_rank)
+    in_type = list(map(eval_with_globals, in_type_name))
+    out_complex = map_rule["complex"](in_complex)
+    out_dim = str(map_rule["dimension"](int(in_dim)))
+    out_rank = map_rule["rank"](in_rank)
+    out_type_name = primitive["output"] + out_complex + out_dim + out_rank
+    out_type = eval_with_globals(out_type_name)
+    return primitive_name, in_type, out_type
+
+
+def generate_primitive_variants(primitive: CochainBasePrimitive, imports: Dict):
+    """Generate primitive variants given a typed primitive.
+
+    Args:
+        primitive: a `CochainBasePrimitive` object.
+        imports: dictionary whose keys and values are the modules and the functions to
+            be imported in order to evaluate the input/output types of the primitive.
+
+    Returns:
+        a dict in which each key is the name of the primitive variant and each value
+            is a PrimitiveParams object.
+    """
+    in_attribute = primitive.att_input
+    primitive_dictionary = dict()
+
+    # Dynamically import modules and functions needed to eval input/output types
+    eval_with_globals = define_eval_with_suitable_imports(imports)
+
+    # Create an iterator for all combinations
+    combinations = itertools.product(
+        in_attribute["complex"], in_attribute["dimension"], in_attribute["rank"]
+    )
+
+    for in_cat, in_dim, in_rank in combinations:
+        primitive_name, in_type, out_type = compute_primitive_in_out_type(
+            primitive, eval_with_globals, in_cat, in_dim, in_rank
+        )
+        primitive_dictionary[primitive_name] = PrimitiveParams(
+            primitive.base_fun, in_type, out_type
+        )
+    return primitive_dictionary
+
+
 # define cochain primitives
-add_coch = {
-    "fun_info": {"name": "AddC", "fun": C.add},
-    "input": ["cochain.Cochain", "cochain.Cochain"],
-    "output": "cochain.Cochain",
-    "att_input": {
+add_coch = CochainBasePrimitive(
+    base_name="AddC",
+    base_fun=C.add,
+    input=["cochain.Cochain", "cochain.Cochain"],
+    output="cochain.Cochain",
+    att_input={
         "complex": ("P", "D"),
         "dimension": ("0", "1", "2"),
         "rank": ("SC", "V", "T"),
     },
-    "map_rule": {
+    map_rule={
         "complex": lambda x: x,
         "dimension": lambda x: x,
         "rank": lambda x: x,
     },
-}
-sub_coch = {
-    "fun_info": {"name": "SubC", "fun": C.sub},
-    "input": ["cochain.Cochain", "cochain.Cochain"],
-    "output": "cochain.Cochain",
-    "att_input": {
+)
+sub_coch = CochainBasePrimitive(
+    base_name="SubC",
+    base_fun=C.sub,
+    input=["cochain.Cochain", "cochain.Cochain"],
+    output="cochain.Cochain",
+    att_input={
         "complex": ("P", "D"),
         "dimension": ("0", "1", "2"),
         "rank": ("SC", "V", "T"),
     },
-    "map_rule": {
+    map_rule={
         "complex": lambda x: x,
         "dimension": lambda x: x,
         "rank": lambda x: x,
     },
-}
-coboundary = {
-    "fun_info": {"name": "cob", "fun": C.coboundary},
-    "input": ["cochain.Cochain"],
-    "output": "cochain.Cochain",
-    "att_input": {
+)
+coboundary = CochainBasePrimitive(
+    base_name="cob",
+    base_fun=C.coboundary,
+    input=["cochain.Cochain"],
+    output="cochain.Cochain",
+    att_input={
         "complex": ("P", "D"),
         "dimension": ("0", "1"),
         "rank": ("SC", "V", "T"),
     },
-    "map_rule": {
+    map_rule={
         "complex": lambda x: x,
         "dimension": partial(operator.add, 1),
         "rank": lambda x: x,
     },
-}
-codifferential = {
-    "fun_info": {"name": "del", "fun": C.codifferential},
-    "input": ["cochain.Cochain"],
-    "output": "cochain.Cochain",
-    "att_input": {
+)
+codifferential = CochainBasePrimitive(
+    base_name="del",
+    base_fun=C.codifferential,
+    input=["cochain.Cochain"],
+    output="cochain.Cochain",
+    att_input={
         "complex": ("P", "D"),
         "dimension": ("1", "2"),
         "rank": ("SC", "V", "T"),
     },
-    "map_rule": {
+    map_rule={
         "complex": lambda x: x,
         "dimension": partial(operator.add, -1),
         "rank": lambda x: x,
     },
-}
-tr_coch = {
-    "fun_info": {"name": "tr", "fun": C.trace},
-    "input": ["cochain.Cochain"],
-    "output": "cochain.Cochain",
-    "att_input": {"complex": ("P", "D"), "dimension": ("0", "1", "2"), "rank": ("T",)},
-    "map_rule": {
-        "complex": lambda x: x,
-        "dimension": lambda x: x,
-        "rank": lambda x: "",
-    },
-}
-mul_FT = {
-    "fun_info": {"name": "MF", "fun": C.scalar_mul},
-    "input": ["cochain.Cochain", "float"],
-    "output": "cochain.Cochain",
-    "att_input": {
+)
+tr_coch = CochainBasePrimitive(
+    base_name="tr",
+    base_fun=C.trace,
+    input=["cochain.Cochain"],
+    output="cochain.Cochain",
+    att_input={
         "complex": ("P", "D"),
         "dimension": ("0", "1", "2"),
-        "rank": ("SC", "V", "T"),
+        "rank": ("T"),
     },
-    "map_rule": {
+    map_rule={
         "complex": lambda x: x,
         "dimension": lambda x: x,
         "rank": lambda x: x,
     },
-}
-inv_mul_FT = {
-    "fun_info": {"name": "InvM", "fun": inv_scalar_mul},
-    "input": ["cochain.Cochain", "float"],
-    "output": "cochain.Cochain",
-    "att_input": {
+)
+mul_FT = CochainBasePrimitive(
+    base_name="MF",
+    base_fun=C.scalar_mul,
+    input=["cochain.Cochain", "float"],
+    output="cochain.Cochain",
+    att_input={
         "complex": ("P", "D"),
         "dimension": ("0", "1", "2"),
         "rank": ("SC", "V", "T"),
     },
-    "map_rule": {
+    map_rule={
         "complex": lambda x: x,
         "dimension": lambda x: x,
         "rank": lambda x: x,
     },
-}
-mul_coch = {
-    "fun_info": {"name": "CMul", "fun": C.cochain_mul},
-    "input": ["cochain.Cochain", "cochain.Cochain"],
-    "output": "cochain.Cochain",
-    "att_input": {
+)
+inv_mul_FT = CochainBasePrimitive(
+    base_name="InvM",
+    base_fun=inv_scalar_mul,
+    input=["cochain.Cochain", "float"],
+    output="cochain.Cochain",
+    att_input={
+        "complex": ("P", "D"),
+        "dimension": ("0", "1", "2"),
+        "rank": ("SC", "V", "T"),
+    },
+    map_rule={
+        "complex": lambda x: x,
+        "dimension": lambda x: x,
+        "rank": lambda x: x,
+    },
+)
+mul_coch = CochainBasePrimitive(
+    base_name="CMul",
+    base_fun=C.cochain_mul,
+    input=["cochain.Cochain", "cochain.Cochain"],
+    output="cochain.Cochain",
+    att_input={
         "complex": ("P", "D"),
         "dimension": ("0", "1", "2"),
         "rank": ("SC",),
     },
-    "map_rule": {
+    map_rule={
         "complex": lambda x: x,
         "dimension": lambda x: x,
         "rank": lambda x: x,
     },
-}
-tran_coch = {
-    "fun_info": {"name": "tran", "fun": C.transpose},
-    "input": ["cochain.Cochain"],
-    "output": "cochain.Cochain",
-    "att_input": {"complex": ("P", "D"), "dimension": ("0", "1", "2"), "rank": ("T",)},
-    "map_rule": {
+)
+tran_coch = CochainBasePrimitive(
+    base_name="tran",
+    base_fun=C.transpose,
+    input=["cochain.Cochain"],
+    output="cochain.Cochain",
+    att_input={
+        "complex": ("P", "D"),
+        "dimension": ("0", "1", "2"),
+        "rank": ("T",),
+    },
+    map_rule={
         "complex": lambda x: x,
         "dimension": lambda x: x,
         "rank": lambda x: x,
     },
-}
-sym_coch = {
-    "fun_info": {"name": "sym", "fun": C.sym},
-    "input": ["cochain.Cochain"],
-    "output": "cochain.Cochain",
-    "att_input": {"complex": ("P", "D"), "dimension": ("0", "1", "2"), "rank": ("T",)},
-    "map_rule": {
+)
+sym_coch = CochainBasePrimitive(
+    base_name="sym",
+    base_fun=C.sym,
+    input=["cochain.Cochain"],
+    output="cochain.Cochain",
+    att_input={
+        "complex": ("P", "D"),
+        "dimension": ("0", "1", "2"),
+        "rank": ("T",),
+    },
+    map_rule={
         "complex": lambda x: x,
         "dimension": lambda x: x,
         "rank": lambda x: x,
     },
-}
-star_1 = {
-    "fun_info": {"name": "St1", "fun": C.star},
-    "input": ["cochain.Cochain"],
-    "output": "cochain.Cochain",
-    "att_input": {
+)
+star_1 = CochainBasePrimitive(
+    base_name="St1",
+    base_fun=C.star,
+    input=["cochain.Cochain"],
+    output="cochain.Cochain",
+    att_input={
         "complex": ("P", "D"),
         "dimension": ("0", "1"),
         "rank": ("SC", "V", "T"),
     },
-    "map_rule": {
+    map_rule={
         "complex": partial(switch_complex, ("P", "D")),
         "dimension": partial(lambda x, y: y - x, y=1),
         "rank": lambda x: x,
     },
-}
-star_2 = {
-    "fun_info": {"name": "St2", "fun": C.star},
-    "input": ["cochain.Cochain"],
-    "output": "cochain.Cochain",
-    "att_input": {
+)
+star_2 = CochainBasePrimitive(
+    base_name="St2",
+    base_fun=C.star,
+    input=["cochain.Cochain"],
+    output="cochain.Cochain",
+    att_input={
         "complex": ("P", "D"),
         "dimension": ("0", "1", "2"),
         "rank": ("SC", "V", "T"),
     },
-    "map_rule": {
+    map_rule={
         "complex": partial(switch_complex, ("P", "D")),
         "dimension": partial(lambda x, y: y - x, y=2),
         "rank": lambda x: x,
     },
-}
-inner_product = {
-    "fun_info": {"name": "Inn", "fun": C.inner},
-    "input": ["cochain.Cochain", "cochain.Cochain"],
-    "output": "float",
-    "att_input": {
+)
+inner_product = CochainBasePrimitive(
+    base_name="Inn",
+    base_fun=C.inner,
+    input=["cochain.Cochain", "cochain.Cochain"],
+    output="float",
+    att_input={
         "complex": ("P", "D"),
         "dimension": ("0", "1", "2"),
         "rank": ("SC", "V", "T"),
     },
-    "map_rule": {
+    map_rule={
         "complex": lambda x: "",
         "dimension": lambda x: "",
         "rank": lambda x: "",
     },
-}
-sin_coch = {
-    "fun_info": {"name": "Sin", "fun": C.sin},
-    "input": ["cochain.Cochain"],
-    "output": "cochain.Cochain",
-    "att_input": {
+)
+sin_coch = CochainBasePrimitive(
+    base_name="Sin",
+    base_fun=C.sin,
+    input=["cochain.Cochain"],
+    output="cochain.Cochain",
+    att_input={
         "complex": ("P", "D"),
         "dimension": ("0", "1", "2"),
         "rank": ("SC", "V", "T"),
     },
-    "map_rule": {
+    map_rule={
         "complex": lambda x: x,
         "dimension": lambda x: x,
         "rank": lambda x: x,
     },
-}
-arcsin_coch = {
-    "fun_info": {"name": "ArcSin", "fun": C.arcsin},
-    "input": ["cochain.Cochain"],
-    "output": "cochain.Cochain",
-    "att_input": {
+)
+arcsin_coch = CochainBasePrimitive(
+    base_name="ArcSin",
+    base_fun=C.arcsin,
+    input=["cochain.Cochain"],
+    output="cochain.Cochain",
+    att_input={
         "complex": ("P", "D"),
         "dimension": ("0", "1", "2"),
         "rank": ("SC", "V", "T"),
     },
-    "map_rule": {
+    map_rule={
         "complex": lambda x: x,
         "dimension": lambda x: x,
         "rank": lambda x: x,
     },
-}
-cos_coch = {
-    "fun_info": {"name": "Cos", "fun": C.cos},
-    "input": ["cochain.Cochain"],
-    "output": "cochain.Cochain",
-    "att_input": {
+)
+cos_coch = CochainBasePrimitive(
+    base_name="Cos",
+    base_fun=C.cos,
+    input=["cochain.Cochain"],
+    output="cochain.Cochain",
+    att_input={
         "complex": ("P", "D"),
         "dimension": ("0", "1", "2"),
         "rank": ("SC", "V", "T"),
     },
-    "map_rule": {
+    map_rule={
         "complex": lambda x: x,
         "dimension": lambda x: x,
         "rank": lambda x: x,
     },
-}
-arccos_coch = {
-    "fun_info": {"name": "ArcCos", "fun": C.arccos},
-    "input": ["cochain.Cochain"],
-    "output": "cochain.Cochain",
-    "att_input": {
+)
+arccos_coch = CochainBasePrimitive(
+    base_name="ArcCos",
+    base_fun=C.arccos,
+    input=["cochain.Cochain"],
+    output="cochain.Cochain",
+    att_input={
         "complex": ("P", "D"),
         "dimension": ("0", "1", "2"),
         "rank": ("SC", "V", "T"),
     },
-    "map_rule": {
+    map_rule={
         "complex": lambda x: x,
         "dimension": lambda x: x,
         "rank": lambda x: x,
     },
-}
-exp_coch = {
-    "fun_info": {"name": "Exp", "fun": C.exp},
-    "input": ["cochain.Cochain"],
-    "output": "cochain.Cochain",
-    "att_input": {
+)
+exp_coch = CochainBasePrimitive(
+    base_name="Exp",
+    base_fun=C.exp,
+    input=["cochain.Cochain"],
+    output="cochain.Cochain",
+    att_input={
         "complex": ("P", "D"),
         "dimension": ("0", "1", "2"),
         "rank": ("SC", "V", "T"),
     },
-    "map_rule": {
+    map_rule={
         "complex": lambda x: x,
         "dimension": lambda x: x,
         "rank": lambda x: x,
     },
-}
-log_coch = {
-    "fun_info": {"name": "Log", "fun": C.log},
-    "input": ["cochain.Cochain"],
-    "output": "cochain.Cochain",
-    "att_input": {
+)
+log_coch = CochainBasePrimitive(
+    base_name="Log",
+    base_fun=C.log,
+    input=["cochain.Cochain"],
+    output="cochain.Cochain",
+    att_input={
         "complex": ("P", "D"),
         "dimension": ("0", "1", "2"),
         "rank": ("SC", "V", "T"),
     },
-    "map_rule": {
+    map_rule={
         "complex": lambda x: x,
         "dimension": lambda x: x,
         "rank": lambda x: x,
     },
-}
-sqrt_coch = {
-    "fun_info": {"name": "Sqrt", "fun": C.sqrt},
-    "input": ["cochain.Cochain"],
-    "output": "cochain.Cochain",
-    "att_input": {
+)
+sqrt_coch = CochainBasePrimitive(
+    base_name="Sqrt",
+    base_fun=C.sqrt,
+    input=["cochain.Cochain"],
+    output="cochain.Cochain",
+    att_input={
         "complex": ("P", "D"),
         "dimension": ("0", "1", "2"),
         "rank": ("SC", "V", "T"),
     },
-    "map_rule": {
+    map_rule={
         "complex": lambda x: x,
         "dimension": lambda x: x,
         "rank": lambda x: x,
     },
-}
-square_coch = {
-    "fun_info": {"name": "Square", "fun": C.square},
-    "input": ["cochain.Cochain"],
-    "output": "cochain.Cochain",
-    "att_input": {
+)
+square_coch = CochainBasePrimitive(
+    base_name="Square",
+    base_fun=C.square,
+    input=["cochain.Cochain"],
+    output="cochain.Cochain",
+    att_input={
         "complex": ("P", "D"),
         "dimension": ("0", "1", "2"),
         "rank": ("SC", "V", "T"),
     },
-    "map_rule": {
+    map_rule={
         "complex": lambda x: x,
         "dimension": lambda x: x,
         "rank": lambda x: x,
     },
-}
+)
 
 coch_prim_list = [
     add_coch,
