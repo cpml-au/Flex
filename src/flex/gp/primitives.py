@@ -37,6 +37,17 @@ def get_base_name(typed_name: str):
 
 
 def add_primitives_to_pset_from_dict(pset: PrimitiveSetTyped, primitives_dict: Dict):
+    """Add a given set of primitives to a PrimitiveSetTyped object.
+
+    Args:
+        pset: a primitive set.
+        primitives_dict: a dictionary composed of two keys: `imports`, containing the
+          import location of the pre-defined primitives; `used`, containing a list of
+          dictionaries (of the same structure as the one in `add_primitives_to_pset`).
+
+    Returns:
+        the updated primitive set
+    """
     primitives_collection = dict()
     imports = primitives_dict["imports"].items()
 
@@ -70,7 +81,8 @@ def add_primitives_to_pset_from_dict(pset: PrimitiveSetTyped, primitives_dict: D
                 suffix_info = typed_name.replace(base_name, "")[1:]
 
                 # 4. Filter and add to pset
-                # If feasible_suffixes is empty, it means we don't filter (add all variants)
+                # If feasible_suffixes is empty, it means we don't filter
+                # (add all variants)
                 if not feasible_suffixes or suffix_info in feasible_suffixes:
                     pset.addPrimitive(
                         params.op, params.in_types, params.out_type, name=typed_name
