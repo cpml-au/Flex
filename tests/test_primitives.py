@@ -1,6 +1,7 @@
 from deap import gp
 from dctkit.dec import cochain as C
 from flex.gp.primitives import add_primitives_to_pset_from_dict
+from flex.gp.cochain_primitives import Dimension, Rank
 
 
 def test_primitives(set_test_dir):
@@ -8,62 +9,126 @@ def test_primitives(set_test_dir):
     scalar_primitives_jax = {
         "imports": {"flex.gp.jax_primitives": ["jax_primitives"]},
         "used": [
-            {"name": "AddF", "dimension": "None", "rank": "None"},
-            {"name": "SubF", "dimension": "None", "rank": "None"},
-            {"name": "MulF", "dimension": "None", "rank": "None"},
-            {"name": "Div", "dimension": "None", "rank": "None"},
-            {"name": "SquareF", "dimension": "None", "rank": "None"},
-            {"name": "SinF", "dimension": "None", "rank": "None"},
-            {"name": "ArcsinF", "dimension": "None", "rank": "None"},
-            {"name": "CosF", "dimension": "None", "rank": "None"},
-            {"name": "ArccosF", "dimension": "None", "rank": "None"},
-            {"name": "ExpF", "dimension": "None", "rank": "None"},
-            {"name": "LogF", "dimension": "None", "rank": "None"},
-            {"name": "InvF", "dimension": "None", "rank": "None"},
+            {"name": "AddF", "dimension": None, "rank": None},
+            {"name": "SubF", "dimension": None, "rank": None},
+            {"name": "MulF", "dimension": None, "rank": None},
+            {"name": "Div", "dimension": None, "rank": None},
+            {"name": "SquareF", "dimension": None, "rank": None},
+            {"name": "SinF", "dimension": None, "rank": None},
+            {"name": "ArcsinF", "dimension": None, "rank": None},
+            {"name": "CosF", "dimension": None, "rank": None},
+            {"name": "ArccosF", "dimension": None, "rank": None},
+            {"name": "ExpF", "dimension": None, "rank": None},
+            {"name": "LogF", "dimension": None, "rank": None},
+            {"name": "InvF", "dimension": None, "rank": None},
         ],
     }
     scalar_primitives_numpy = {
         "imports": {"flex.gp.numpy_primitives": ["numpy_primitives"]},
         "used": [
-            {"name": "add", "dimension": "None", "rank": "None"},
-            {"name": "sub", "dimension": "None", "rank": "None"},
-            {"name": "mul", "dimension": "None", "rank": "None"},
-            {"name": "div", "dimension": "None", "rank": "None"},
-            {"name": "aq", "dimension": "None", "rank": "None"},
-            {"name": "square", "dimension": "None", "rank": "None"},
-            {"name": "sin", "dimension": "None", "rank": "None"},
-            {"name": "cos", "dimension": "None", "rank": "None"},
-            {"name": "exp", "dimension": "None", "rank": "None"},
-            {"name": "log", "dimension": "None", "rank": "None"},
+            {"name": "add", "dimension": None, "rank": None},
+            {"name": "sub", "dimension": None, "rank": None},
+            {"name": "mul", "dimension": None, "rank": None},
+            {"name": "div", "dimension": None, "rank": None},
+            {"name": "aq", "dimension": None, "rank": None},
+            {"name": "square", "dimension": None, "rank": None},
+            {"name": "sin", "dimension": None, "rank": None},
+            {"name": "cos", "dimension": None, "rank": None},
+            {"name": "exp", "dimension": None, "rank": None},
+            {"name": "log", "dimension": None, "rank": None},
         ],
     }
 
     cochain_primitives_scalar = {
         "imports": {"flex.gp.cochain_primitives": ["coch_primitives"]},
         "used": [
-            {"name": "AddC", "dimension": ["0", "1"], "rank": ["SC"]},
-            {"name": "SubC", "dimension": ["0", "1"], "rank": ["SC"]},
-            {"name": "cob", "dimension": ["0", "1"], "rank": ["SC"]},
-            {"name": "del", "dimension": ["1"], "rank": ["SC"]},
-            {"name": "St1", "dimension": ["0", "1"], "rank": ["SC"]},
-            {"name": "MF", "dimension": ["0", "1"], "rank": ["SC"]},
-            {"name": "Inn", "dimension": ["0", "1"], "rank": ["SC"]},
+            {
+                "name": "AddC",
+                "dimension": [Dimension.ZERO, Dimension.ONE],
+                "rank": [Rank.SCALAR],
+            },
+            {
+                "name": "SubC",
+                "dimension": [Dimension.ZERO, Dimension.ONE],
+                "rank": [Rank.SCALAR],
+            },
+            {
+                "name": "cob",
+                "dimension": [Dimension.ZERO, Dimension.ONE],
+                "rank": [Rank.SCALAR],
+            },
+            {"name": "del", "dimension": [Dimension.ONE], "rank": [Rank.SCALAR]},
+            {
+                "name": "St1",
+                "dimension": [Dimension.ZERO, Dimension.ONE],
+                "rank": [Rank.SCALAR],
+            },
+            {
+                "name": "MF",
+                "dimension": [Dimension.ZERO, Dimension.ONE],
+                "rank": [Rank.SCALAR],
+            },
+            {
+                "name": "Inn",
+                "dimension": [Dimension.ZERO, Dimension.ONE],
+                "rank": [Rank.SCALAR],
+            },
         ],
     }
 
     cochain_primitives_vector_tensor = {
         "imports": {"flex.gp.cochain_primitives": ["coch_primitives"]},
         "used": [
-            {"name": "AddC", "dimension": ["0", "1", "2"], "rank": ["SC", "V", "T"]},
-            {"name": "SubC", "dimension": ["0", "1", "2"], "rank": ["SC", "V", "T"]},
-            {"name": "cob", "dimension": ["0", "1", "2"], "rank": ["SC"]},
-            {"name": "del", "dimension": ["2", "1"], "rank": ["SC"]},
-            {"name": "St2", "dimension": ["0", "1", "2"], "rank": ["SC", "V", "T"]},
-            {"name": "MF", "dimension": ["0", "1", "2"], "rank": ["SC", "V", "T"]},
-            {"name": "Inn", "dimension": ["0", "1", "2"], "rank": ["SC", "V", "T"]},
-            {"name": "tr", "dimension": ["0", "1", "2"], "rank": ["T"]},
-            {"name": "tran", "dimension": ["0", "1", "2"], "rank": ["T"]},
-            {"name": "sym", "dimension": ["0", "1", "2"], "rank": ["T"]},
+            {
+                "name": "AddC",
+                "dimension": [Dimension.ZERO, Dimension.ONE, Dimension.TWO],
+                "rank": [Rank.SCALAR, Rank.VECTOR, Rank.TENSOR],
+            },
+            {
+                "name": "SubC",
+                "dimension": [Dimension.ZERO, Dimension.ONE, Dimension.TWO],
+                "rank": [Rank.SCALAR, Rank.VECTOR, Rank.TENSOR],
+            },
+            {
+                "name": "cob",
+                "dimension": [Dimension.ZERO, Dimension.ONE, Dimension.TWO],
+                "rank": [Rank.SCALAR],
+            },
+            {
+                "name": "del",
+                "dimension": [Dimension.TWO, Dimension.ONE],
+                "rank": [Rank.SCALAR],
+            },
+            {
+                "name": "St2",
+                "dimension": [Dimension.ZERO, Dimension.ONE, Dimension.TWO],
+                "rank": [Rank.SCALAR, Rank.VECTOR, Rank.TENSOR],
+            },
+            {
+                "name": "MF",
+                "dimension": [Dimension.ZERO, Dimension.ONE, Dimension.TWO],
+                "rank": [Rank.SCALAR, Rank.VECTOR, Rank.TENSOR],
+            },
+            {
+                "name": "Inn",
+                "dimension": [Dimension.ZERO, Dimension.ONE, Dimension.TWO],
+                "rank": [Rank.SCALAR, Rank.VECTOR, Rank.TENSOR],
+            },
+            {
+                "name": "tr",
+                "dimension": [Dimension.ZERO, Dimension.ONE, Dimension.TWO],
+                "rank": [Rank.TENSOR],
+            },
+            {
+                "name": "tran",
+                "dimension": [Dimension.ZERO, Dimension.ONE, Dimension.TWO],
+                "rank": [Rank.TENSOR],
+            },
+            {
+                "name": "sym",
+                "dimension": [Dimension.ZERO, Dimension.ONE, Dimension.TWO],
+                "rank": [Rank.TENSOR],
+            },
         ],
     }
 

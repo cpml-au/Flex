@@ -28,15 +28,15 @@ gp:
     imports: { "flex.gp.cochain_primitives": ["coch_primitives"] }
     used:
       [
-        { "name": "AddF", "dimension": None, "rank": None },
-        { "name": "SubF", "dimension": None, "rank": None },
-        { "name": "MulF", "dimension": None, "rank": None },
-        { "name": "Div", "dimension": None, "rank": None },
-        { "name": "AddC", "dimension": ["0", "1"], "rank": ["SC"] },
-        { "name": "SubC", "dimension": ["0", "1"], "rank": ["SC"] },
-        { "name": "cob", "dimension": ["0", "1"], "rank": ["SC"] },
-        { "name": "del", "dimension": ["1"], "rank": ["SC"] },
-        { "name": "St1", "dimension": ["0", "1"], "rank": ["SC"] },
-        { "name": "MF", "dimension": ["0", "1"], "rank": ["SC"] },
-        { "name": "Inn", "dimension": ["0", "1"], "rank": ["SC"] },
+        { "name": "AddF", "dimension": null, "rank": null },
+        { "name": "SubF", "dimension": null, "rank": null },
+        { "name": "MulF", "dimension": null, "rank": null },
+        { "name": "Div", "dimension": null, "rank": null },
+        { "name": "AddC", "dimension": [!dim 0, !dim 1], "rank": [!rank SC]},
+        { "name": "SubC", "dimension": [!dim 0, !dim 1], "rank": [!rank SC]},
+        { "name": "cob", "dimension": [!dim 0, !dim 1], "rank": [!rank SC]},
+        { "name": "del", "dimension": [!dim 1], "rank": [!rank SC]},
+        { "name": "St1", "dimension": [!dim 0, !dim 1], "rank": [!rank SC]},
+        { "name": "MF", "dimension": [!dim 0, !dim 1], "rank": [!rank SC]},
+        { "name": "Inn", "dimension": [!dim 0, !dim 1], "rank": [!rank SC]},
       ]

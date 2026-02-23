@@ -37,20 +37,10 @@ def get_base_name(typed_name: str):
 
 
 def add_primitives_to_pset_from_dict(pset: PrimitiveSetTyped, primitives_dict: Dict):
-    """Add a given set of primitives to a PrimitiveSetTyped object.
-
-    Args:
-        pset: a primitive set.
-        primitives_dict: a dictionary composed of two keys: `imports`, containing the
-          import location of the pre-defined primitives; `used`, containing a list of
-          dictionaries (of the same structure as the one in `add_primitives_to_pset`).
-
-    Returns:
-        the updated primitive set
-    """
     primitives_collection = dict()
     imports = primitives_dict["imports"].items()
 
+    # Load the primitives (e.g., coch_primitives)
     for module_name, function_names in imports:
         module = import_module(module_name)
         for function_name in function_names:
@@ -58,23 +48,29 @@ def add_primitives_to_pset_from_dict(pset: PrimitiveSetTyped, primitives_dict: D
             primitives_collection = primitives_collection | primitive
 
     for entry in primitives_dict["used"]:
-        # Normalize "None" strings to empty lists
-        dims = entry["dimension"] if entry["dimension"] != "None" else []
-        ranks = entry["rank"] if entry["rank"] != "None" else []
+        # Normalize attributes. In YAML they might be None,
+        # but in your dictionary they are now lists of Enums.
+        dims = entry["dimension"] if entry["dimension"] is not None else []
+        ranks = entry["rank"] if entry["rank"] is not None else []
 
-        # Build suffixes: e.g., '0' + 'V' -> '0V'
+        # Build suffixes using .value.
+        # Example: Dimension.ZERO (0) + Rank.VECTOR ("V") -> "0V"
+        # We use str() for dimension because IntEnum.value is an int.
         feasible_suffixes = {
-            f"{d}{r.replace('SC', '')}" for d, r in itertools.product(dims, ranks)
+            f"{d.value}{r.value}" for d, r in itertools.product(dims, ranks)
         }
 
         for typed_name, params in primitives_collection.items():
             base_name = get_base_name(typed_name)
 
             if entry["name"] == base_name:
-                # Get the part after the true name (e.g., 'P0V' -> 'P0V')
-                # Then skip the first char (Primal/Dual) to get the dim/rank suffix
+                # Extract the suffix from the generated name.
+                # Example: base="AddC", typed="AddCP0V" -> suffix_info="0V"
+                # The [1:] skips the Complex ('P' or 'D')
                 suffix_info = typed_name.replace(base_name, "")[1:]
 
+                # 4. Filter and add to pset
+                # If feasible_suffixes is empty, it means we don't filter (add all variants)
                 if not feasible_suffixes or suffix_info in feasible_suffixes:
                     pset.addPrimitive(
                         params.op, params.in_types, params.out_type, name=typed_name
