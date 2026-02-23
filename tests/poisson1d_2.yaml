@@ -36,7 +36,7 @@ gp:
         { "name": "SubC", "dimension": [!dim 0, !dim 1], "rank": [!rank SC]},
         { "name": "cob", "dimension": [!dim 0, !dim 1], "rank": [!rank SC]},
         { "name": "del", "dimension": [!dim 1], "rank": [!rank SC]},
-        { "name": "St1", "dimension": [!dim 0, !dim 1], "rank": [!rank SC]},
+        { "name": "St_one", "dimension": [!dim 0, !dim 1], "rank": [!rank SC]},
         { "name": "MF", "dimension": [!dim 0, !dim 1], "rank": [!rank SC]},
         { "name": "Inn", "dimension": [!dim 0, !dim 1], "rank": [!rank SC]},
       ]
