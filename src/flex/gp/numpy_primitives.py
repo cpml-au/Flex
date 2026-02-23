@@ -36,4 +36,5 @@ conversion_rules = {
     "aq": lambda *args_: "Mul({}, Pow(Add(1, Pow({}, 2)), -1/2))".format(*args_),
     "prot_pow": lambda *args_: "Pow(Abs({}), {})".format(*args_),
     "prot_log": lambda *args_: "log(Abs({}))".format(*args_),
+    "log": lambda *args_: "log({}))".format(*args_),
 }

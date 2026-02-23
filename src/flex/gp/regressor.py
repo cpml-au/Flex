@@ -99,10 +99,11 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         batch_size : batch size used for Ray-based fitness evaluation.
         num_cpus: number of CPUs allocated to each Ray task.
         max_calls: maximum number of tasks a Ray worker can execute before restart.
-            The default is 0, which means infinite number of tasks.
+            The default is `0`, which means infinite number of tasks.
         custom_logger: user-defined logging function called with the best individuals.
         special_term_name: name used for ephemeral constants during SymPy conversion.
-        sympy_conversion_rules: mapping from GP primitives to SymPy primitives.
+        sympy_conversion_rules: mapping from GP primitives (DEAP) to SymPy primitives.
+            The default is `None`, which means that sympy conversion is disabled.
         multiprocessing: whether to use Ray for parallel fitness evaluation.
     """
 

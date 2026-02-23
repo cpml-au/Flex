@@ -197,7 +197,8 @@ regression problem.
 
 3. **Is it possible to get the best individuals in a sympy format?**
 
-   Yes, but only for standard algebraic symbolic regression, by using the class method `get_best_individual_sympy`.
+   Yes, but only for standard algebraic symbolic regression, by using the class method `get_best_individual_sympy`. You need to define an appropriate `conversion_rules` dictionary, that converts `flex` primitives to the `sympy` format. Then you should set in the regressor definition `sympy_conversion_rules=conversion_rules`.
+   We suggest to have a look on the `simple_sr` tutorial for more details.
 
 4. **Why isn't there a pre-defined fitness/predict/score function?**
 
