@@ -6,10 +6,27 @@ from typing import Tuple, Callable, List, Dict
 import itertools
 from .primitives import PrimitiveParams
 from importlib import import_module
-
+from enum import Enum, IntEnum
 
 # Define the modules and functions needed to eval inputs and outputs
 modules_functions = {"dctkit.dec": ["cochain"]}
+
+
+class Complex(Enum):
+    PRIMAL = "P"
+    DUAL = "D"
+
+
+class Rank(Enum):
+    SCALAR = ""
+    VECTOR = "V"
+    TENSOR = "T"
+
+
+class Dimension(IntEnum):
+    ZERO = 0
+    ONE = 1
+    TWO = 2
 
 
 class CochainBasePrimitive:
@@ -60,17 +77,16 @@ def inv_scalar_mul(c: C.Cochain, f: float):
         return C.scalar_mul(c, jax.numpy.nan)
 
 
-def switch_complex(complexes: Tuple, complex: str):
-    """Swith complex given a tuple of 2 complexes (primal/dual).
+def switch_complex(complex: Complex):
+    """Switch complex (from primal to dual or viceversa).
     Args:
-        complexes: a tuple of 2 complexes (primal/dual).
-        complex: a complex.
+        complex: a complex object.
 
     Returns:
         the other complex.
     """
-    switched_complex_list = list(set(complexes) - set(complex))
-    return str(switched_complex_list[0])
+    # Logic to toggle between P and D
+    return Complex.DUAL if complex == Complex.PRIMAL else Complex.PRIMAL
 
 
 def define_eval_with_suitable_imports(imports: Dict):
@@ -103,9 +119,9 @@ def define_eval_with_suitable_imports(imports: Dict):
 def compute_primitive_in_out_type(
     primitive: CochainBasePrimitive,
     eval_with_globals: Callable,
-    in_complex: str,
-    in_dim: str,
-    in_rank: str,
+    in_complex: Complex,
+    in_dim: Dimension,
+    in_rank: Rank,
 ):
     """Resolves the specific variant name and types for a primitive.
 
@@ -133,25 +149,43 @@ def compute_primitive_in_out_type(
     # base_primitive = primitive["fun_info"]
     map_rule = primitive.map_rule
 
-    in_rank = in_rank.replace("SC", "")
-    primitive_name = primitive.base_name + in_complex + in_dim + in_rank
+    # in_rank = in_rank.replace("SC", "")
+    primitive_name = (
+        f"{primitive.base_name}{in_complex.value}{in_dim.value}{in_rank.value}"
+    )
     in_type_name = []
     # compute the input type list
     for i, input in enumerate(primitive.input):
         # float type must be handled separately
         if input == "float":
             in_type_name.append(input)
-        elif len(in_rank) == 2:
-            # in this case the correct rank must be taken
-            in_type_name.append(input + in_complex + in_dim + in_rank[i])
         else:
-            in_type_name.append(input + in_complex + in_dim + in_rank)
+            in_type_name.append(
+                f"{input}{in_complex.value}{in_dim.value}{in_rank.value}"
+            )
     in_type = list(map(eval_with_globals, in_type_name))
-    out_complex = map_rule["complex"](in_complex)
-    out_dim = str(map_rule["dimension"](int(in_dim)))
-    out_rank = map_rule["rank"](in_rank)
-    out_type_name = primitive.output + out_complex + out_dim + out_rank
+
+    # 1. Run the mapping rules
+    raw_out_complex = map_rule["complex"](in_complex)
+    raw_out_dim = map_rule["dimension"](in_dim)
+    raw_out_rank = map_rule["rank"](in_rank)
+
+    # 2. Safely cast back to Enums ONLY if they aren't None
+    out_complex = Complex(raw_out_complex) if raw_out_complex is not None else None
+    out_dim = Dimension(raw_out_dim) if raw_out_dim is not None else None
+    out_rank = Rank(raw_out_rank) if raw_out_rank is not None else None
+
+    # 3. Build the output string name
+    # We filter out None values so "float" + None + None becomes just "float"
+    out_type_parts = [primitive.output]
+    for attr in [out_complex, out_dim, out_rank]:
+        if attr is not None:
+            # Note: use str(attr.value) for Dimension to get "0" instead of "<Dimension.ZERO: 0>"
+            out_type_parts.append(str(attr.value))
+
+    out_type_name = "".join(out_type_parts)
     out_type = eval_with_globals(out_type_name)
+
     return primitive_name, in_type, out_type
 
 
@@ -195,9 +229,9 @@ add_coch = CochainBasePrimitive(
     input=["cochain.Cochain", "cochain.Cochain"],
     output="cochain.Cochain",
     att_input={
-        "complex": ("P", "D"),
-        "dimension": ("0", "1", "2"),
-        "rank": ("SC", "V", "T"),
+        "complex": (Complex.PRIMAL, Complex.DUAL),
+        "dimension": (Dimension.ZERO, Dimension.ONE, Dimension.TWO),
+        "rank": (Rank.SCALAR, Rank.VECTOR, Rank.TENSOR),
     },
     map_rule={
         "complex": lambda x: x,
@@ -211,9 +245,9 @@ sub_coch = CochainBasePrimitive(
     input=["cochain.Cochain", "cochain.Cochain"],
     output="cochain.Cochain",
     att_input={
-        "complex": ("P", "D"),
-        "dimension": ("0", "1", "2"),
-        "rank": ("SC", "V", "T"),
+        "complex": (Complex.PRIMAL, Complex.DUAL),
+        "dimension": (Dimension.ZERO, Dimension.ONE, Dimension.TWO),
+        "rank": (Rank.SCALAR, Rank.VECTOR, Rank.TENSOR),
     },
     map_rule={
         "complex": lambda x: x,
@@ -227,13 +261,13 @@ coboundary = CochainBasePrimitive(
     input=["cochain.Cochain"],
     output="cochain.Cochain",
     att_input={
-        "complex": ("P", "D"),
-        "dimension": ("0", "1"),
-        "rank": ("SC", "V", "T"),
+        "complex": (Complex.PRIMAL, Complex.DUAL),
+        "dimension": (Dimension.ZERO, Dimension.ONE),
+        "rank": (Rank.SCALAR, Rank.VECTOR, Rank.TENSOR),
     },
     map_rule={
         "complex": lambda x: x,
-        "dimension": partial(operator.add, 1),
+        "dimension": lambda x: Dimension(x + 1),
         "rank": lambda x: x,
     },
 )
@@ -243,13 +277,13 @@ codifferential = CochainBasePrimitive(
     input=["cochain.Cochain"],
     output="cochain.Cochain",
     att_input={
-        "complex": ("P", "D"),
-        "dimension": ("1", "2"),
-        "rank": ("SC", "V", "T"),
+        "complex": (Complex.PRIMAL, Complex.DUAL),
+        "dimension": (Dimension.ONE, Dimension.TWO),
+        "rank": (Rank.SCALAR, Rank.VECTOR, Rank.TENSOR),
     },
     map_rule={
         "complex": lambda x: x,
-        "dimension": partial(operator.add, -1),
+        "dimension": lambda x: Dimension(x - 1),
         "rank": lambda x: x,
     },
 )
@@ -259,9 +293,9 @@ tr_coch = CochainBasePrimitive(
     input=["cochain.Cochain"],
     output="cochain.Cochain",
     att_input={
-        "complex": ("P", "D"),
-        "dimension": ("0", "1", "2"),
-        "rank": ("T"),
+        "complex": (Complex.PRIMAL, Complex.DUAL),
+        "dimension": (Dimension.ZERO, Dimension.ONE, Dimension.TWO),
+        "rank": (Rank.TENSOR,),
     },
     map_rule={
         "complex": lambda x: x,
@@ -275,9 +309,9 @@ mul_FT = CochainBasePrimitive(
     input=["cochain.Cochain", "float"],
     output="cochain.Cochain",
     att_input={
-        "complex": ("P", "D"),
-        "dimension": ("0", "1", "2"),
-        "rank": ("SC", "V", "T"),
+        "complex": (Complex.PRIMAL, Complex.DUAL),
+        "dimension": (Dimension.ZERO, Dimension.ONE, Dimension.TWO),
+        "rank": (Rank.SCALAR, Rank.VECTOR, Rank.TENSOR),
     },
     map_rule={
         "complex": lambda x: x,
@@ -291,9 +325,9 @@ inv_mul_FT = CochainBasePrimitive(
     input=["cochain.Cochain", "float"],
     output="cochain.Cochain",
     att_input={
-        "complex": ("P", "D"),
-        "dimension": ("0", "1", "2"),
-        "rank": ("SC", "V", "T"),
+        "complex": (Complex.PRIMAL, Complex.DUAL),
+        "dimension": (Dimension.ZERO, Dimension.ONE, Dimension.TWO),
+        "rank": (Rank.SCALAR, Rank.VECTOR, Rank.TENSOR),
     },
     map_rule={
         "complex": lambda x: x,
@@ -307,9 +341,9 @@ mul_coch = CochainBasePrimitive(
     input=["cochain.Cochain", "cochain.Cochain"],
     output="cochain.Cochain",
     att_input={
-        "complex": ("P", "D"),
-        "dimension": ("0", "1", "2"),
-        "rank": ("SC",),
+        "complex": (Complex.PRIMAL, Complex.DUAL),
+        "dimension": (Dimension.ZERO, Dimension.ONE, Dimension.TWO),
+        "rank": (Rank.SCALAR,),
     },
     map_rule={
         "complex": lambda x: x,
@@ -323,9 +357,9 @@ tran_coch = CochainBasePrimitive(
     input=["cochain.Cochain"],
     output="cochain.Cochain",
     att_input={
-        "complex": ("P", "D"),
-        "dimension": ("0", "1", "2"),
-        "rank": ("T",),
+        "complex": (Complex.PRIMAL, Complex.DUAL),
+        "dimension": (Dimension.ZERO, Dimension.ONE, Dimension.TWO),
+        "rank": (Rank.TENSOR,),
     },
     map_rule={
         "complex": lambda x: x,
@@ -339,9 +373,9 @@ sym_coch = CochainBasePrimitive(
     input=["cochain.Cochain"],
     output="cochain.Cochain",
     att_input={
-        "complex": ("P", "D"),
-        "dimension": ("0", "1", "2"),
-        "rank": ("T",),
+        "complex": (Complex.PRIMAL, Complex.DUAL),
+        "dimension": (Dimension.ZERO, Dimension.ONE, Dimension.TWO),
+        "rank": (Rank.TENSOR,),
     },
     map_rule={
         "complex": lambda x: x,
@@ -355,13 +389,13 @@ star_1 = CochainBasePrimitive(
     input=["cochain.Cochain"],
     output="cochain.Cochain",
     att_input={
-        "complex": ("P", "D"),
-        "dimension": ("0", "1"),
-        "rank": ("SC", "V", "T"),
+        "complex": (Complex.PRIMAL, Complex.DUAL),
+        "dimension": (Dimension.ZERO, Dimension.ONE),
+        "rank": (Rank.SCALAR, Rank.VECTOR, Rank.TENSOR),
     },
     map_rule={
-        "complex": partial(switch_complex, ("P", "D")),
-        "dimension": partial(lambda x, y: y - x, y=1),
+        "complex": switch_complex,
+        "dimension": lambda x: Dimension(1 - x),
         "rank": lambda x: x,
     },
 )
@@ -371,13 +405,13 @@ star_2 = CochainBasePrimitive(
     input=["cochain.Cochain"],
     output="cochain.Cochain",
     att_input={
-        "complex": ("P", "D"),
-        "dimension": ("0", "1", "2"),
-        "rank": ("SC", "V", "T"),
+        "complex": (Complex.PRIMAL, Complex.DUAL),
+        "dimension": (Dimension.ZERO, Dimension.ONE, Dimension.TWO),
+        "rank": (Rank.SCALAR, Rank.VECTOR, Rank.TENSOR),
     },
     map_rule={
-        "complex": partial(switch_complex, ("P", "D")),
-        "dimension": partial(lambda x, y: y - x, y=2),
+        "complex": switch_complex,
+        "dimension": lambda x: Dimension(2 - x),
         "rank": lambda x: x,
     },
 )
@@ -387,14 +421,14 @@ inner_product = CochainBasePrimitive(
     input=["cochain.Cochain", "cochain.Cochain"],
     output="float",
     att_input={
-        "complex": ("P", "D"),
-        "dimension": ("0", "1", "2"),
-        "rank": ("SC", "V", "T"),
+        "complex": (Complex.PRIMAL, Complex.DUAL),
+        "dimension": (Dimension.ZERO, Dimension.ONE, Dimension.TWO),
+        "rank": (Rank.SCALAR, Rank.VECTOR, Rank.TENSOR),
     },
     map_rule={
-        "complex": lambda x: "",
-        "dimension": lambda x: "",
-        "rank": lambda x: "",
+        "complex": lambda x: None,
+        "dimension": lambda x: None,
+        "rank": lambda x: None,
     },
 )
 sin_coch = CochainBasePrimitive(
@@ -403,9 +437,9 @@ sin_coch = CochainBasePrimitive(
     input=["cochain.Cochain"],
     output="cochain.Cochain",
     att_input={
-        "complex": ("P", "D"),
-        "dimension": ("0", "1", "2"),
-        "rank": ("SC", "V", "T"),
+        "complex": (Complex.PRIMAL, Complex.DUAL),
+        "dimension": (Dimension.ZERO, Dimension.ONE, Dimension.TWO),
+        "rank": (Rank.SCALAR, Rank.VECTOR, Rank.TENSOR),
     },
     map_rule={
         "complex": lambda x: x,
@@ -419,9 +453,9 @@ arcsin_coch = CochainBasePrimitive(
     input=["cochain.Cochain"],
     output="cochain.Cochain",
     att_input={
-        "complex": ("P", "D"),
-        "dimension": ("0", "1", "2"),
-        "rank": ("SC", "V", "T"),
+        "complex": (Complex.PRIMAL, Complex.DUAL),
+        "dimension": (Dimension.ZERO, Dimension.ONE, Dimension.TWO),
+        "rank": (Rank.SCALAR, Rank.VECTOR, Rank.TENSOR),
     },
     map_rule={
         "complex": lambda x: x,
@@ -435,9 +469,9 @@ cos_coch = CochainBasePrimitive(
     input=["cochain.Cochain"],
     output="cochain.Cochain",
     att_input={
-        "complex": ("P", "D"),
-        "dimension": ("0", "1", "2"),
-        "rank": ("SC", "V", "T"),
+        "complex": (Complex.PRIMAL, Complex.DUAL),
+        "dimension": (Dimension.ZERO, Dimension.ONE, Dimension.TWO),
+        "rank": (Rank.SCALAR, Rank.VECTOR, Rank.TENSOR),
     },
     map_rule={
         "complex": lambda x: x,
@@ -451,9 +485,9 @@ arccos_coch = CochainBasePrimitive(
     input=["cochain.Cochain"],
     output="cochain.Cochain",
     att_input={
-        "complex": ("P", "D"),
-        "dimension": ("0", "1", "2"),
-        "rank": ("SC", "V", "T"),
+        "complex": (Complex.PRIMAL, Complex.DUAL),
+        "dimension": (Dimension.ZERO, Dimension.ONE, Dimension.TWO),
+        "rank": (Rank.SCALAR, Rank.VECTOR, Rank.TENSOR),
     },
     map_rule={
         "complex": lambda x: x,
@@ -467,9 +501,9 @@ exp_coch = CochainBasePrimitive(
     input=["cochain.Cochain"],
     output="cochain.Cochain",
     att_input={
-        "complex": ("P", "D"),
-        "dimension": ("0", "1", "2"),
-        "rank": ("SC", "V", "T"),
+        "complex": (Complex.PRIMAL, Complex.DUAL),
+        "dimension": (Dimension.ZERO, Dimension.ONE, Dimension.TWO),
+        "rank": (Rank.SCALAR, Rank.VECTOR, Rank.TENSOR),
     },
     map_rule={
         "complex": lambda x: x,
@@ -483,9 +517,9 @@ log_coch = CochainBasePrimitive(
     input=["cochain.Cochain"],
     output="cochain.Cochain",
     att_input={
-        "complex": ("P", "D"),
-        "dimension": ("0", "1", "2"),
-        "rank": ("SC", "V", "T"),
+        "complex": (Complex.PRIMAL, Complex.DUAL),
+        "dimension": (Dimension.ZERO, Dimension.ONE, Dimension.TWO),
+        "rank": (Rank.SCALAR, Rank.VECTOR, Rank.TENSOR),
     },
     map_rule={
         "complex": lambda x: x,
@@ -499,9 +533,9 @@ sqrt_coch = CochainBasePrimitive(
     input=["cochain.Cochain"],
     output="cochain.Cochain",
     att_input={
-        "complex": ("P", "D"),
-        "dimension": ("0", "1", "2"),
-        "rank": ("SC", "V", "T"),
+        "complex": (Complex.PRIMAL, Complex.DUAL),
+        "dimension": (Dimension.ZERO, Dimension.ONE, Dimension.TWO),
+        "rank": (Rank.SCALAR, Rank.VECTOR, Rank.TENSOR),
     },
     map_rule={
         "complex": lambda x: x,
@@ -515,9 +549,9 @@ square_coch = CochainBasePrimitive(
     input=["cochain.Cochain"],
     output="cochain.Cochain",
     att_input={
-        "complex": ("P", "D"),
-        "dimension": ("0", "1", "2"),
-        "rank": ("SC", "V", "T"),
+        "complex": (Complex.PRIMAL, Complex.DUAL),
+        "dimension": (Dimension.ZERO, Dimension.ONE, Dimension.TWO),
+        "rank": (Rank.SCALAR, Rank.VECTOR, Rank.TENSOR),
     },
     map_rule={
         "complex": lambda x: x,

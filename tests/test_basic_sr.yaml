@@ -27,10 +27,10 @@ gp:
     imports: { "flex.gp.jax_primitives": ["jax_primitives"] }
     used:
       [
-        { "name": "AddF", "dimension": None, "rank": None },
-        { "name": "SubF", "dimension": None, "rank": None },
-        { "name": "MulF", "dimension": None, "rank": None },
-        { "name": "Div", "dimension": None, "rank": None },
-        { "name": "SinF", "dimension": None, "rank": None },
-        { "name": "CosF", "dimension": None, "rank": None },
+        { "name": "AddF", "dimension": null, "rank": null },
+        { "name": "SubF", "dimension": null, "rank": null },
+        { "name": "MulF", "dimension": null, "rank": null },
+        { "name": "Div", "dimension": null, "rank": null },
+        { "name": "SinF", "dimension": null, "rank": null },
+        { "name": "CosF", "dimension": null, "rank": null },
       ]

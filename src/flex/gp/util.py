@@ -3,12 +3,35 @@ from itertools import chain
 import ray
 import numpy as np
 from deap import gp
+from flex.gp.cochain_primitives import Dimension, Rank
+
+
+# Define how to handle the !dim tag
+def dim_constructor(loader, node):
+    # node.value is the string '0' or '1' from the YAML
+    return Dimension(int(node.value))
+
+
+# Define how to handle the !rank tag
+def rank_constructor(loader, node):
+    # node.value is 'SC', 'V', or 'T'
+    val = node.value
+    if val == "SC":
+        return Rank.SCALAR
+    elif val == "V":
+        return Rank.VECTOR
+    elif val == "T":
+        return Rank.TENSOR
 
 
 def load_config_data(filename):
     """Load problem settings from YAML file."""
+    # Register the tags with the SafeLoader (or your preferred loader)
+    yaml.SafeLoader.add_constructor("!dim", dim_constructor)
+    yaml.SafeLoader.add_constructor("!rank", rank_constructor)
+
     with open(filename) as config_file:
-        config_file_data = yaml.safe_load(config_file)
+        config_file_data = yaml.load(config_file, Loader=yaml.SafeLoader)
 
     regressor_params = dict()
     regressor_params["num_individuals"] = config_file_data["gp"]["num_individuals"]
