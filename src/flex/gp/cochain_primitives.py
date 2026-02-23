@@ -306,7 +306,7 @@ tr_coch = CochainBasePrimitive(
     map_rule={
         "complex": lambda x: x,
         "dimension": lambda x: x,
-        "rank": lambda x: x,
+        "rank": lambda x: None,
     },
 )
 mul_FT = CochainBasePrimitive(
@@ -390,7 +390,7 @@ sym_coch = CochainBasePrimitive(
     },
 )
 star_1 = CochainBasePrimitive(
-    base_name="St1",
+    base_name="St_one",
     base_fun=C.star,
     input=["cochain.Cochain"],
     output="cochain.Cochain",
@@ -406,7 +406,7 @@ star_1 = CochainBasePrimitive(
     },
 )
 star_2 = CochainBasePrimitive(
-    base_name="St2",
+    base_name="St_two",
     base_fun=C.star,
     input=["cochain.Cochain"],
     output="cochain.Cochain",
