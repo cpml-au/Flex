@@ -1,8 +1,7 @@
 from dctkit.dec import cochain as C
-import operator
 from functools import partial
 import jax.numpy
-from typing import Tuple, Callable, List, Dict
+from typing import Callable, List, Dict
 import itertools
 from .primitives import PrimitiveParams
 from importlib import import_module
@@ -13,17 +12,23 @@ modules_functions = {"dctkit.dec": ["cochain"]}
 
 
 class Complex(Enum):
+    """Enum class for complex."""
+
     PRIMAL = "P"
     DUAL = "D"
 
 
 class Rank(Enum):
+    """Enum class for rank."""
+
     SCALAR = ""
     VECTOR = "V"
     TENSOR = "T"
 
 
 class Dimension(IntEnum):
+    """Enum class for dimension."""
+
     ZERO = 0
     ONE = 1
     TWO = 2
@@ -135,9 +140,9 @@ def compute_primitive_in_out_type(
         primitive: a `CochainBasePrimitive` object.
         eval_with_globals: The evaluation function created by
             `define_eval_with_suitable_imports`.
-        in_complex: The current complex ('P' or 'D').
-        in_dim: The current dimension as a string.
-        in_rank: The current rank (e.g., 'SC', 'V', 'T').
+        in_complex: The current complex.
+        in_dim: The current dimension.
+        in_rank: The current rank.
 
     Returns:
         A tuple containing the concatenated name (e.g., "addP1V"),
@@ -180,7 +185,8 @@ def compute_primitive_in_out_type(
     out_type_parts = [primitive.output]
     for attr in [out_complex, out_dim, out_rank]:
         if attr is not None:
-            # Note: use str(attr.value) for Dimension to get "0" instead of "<Dimension.ZERO: 0>"
+            # NOTE: use str(attr.value) for Dimension to get "0"
+            # instead of "<Dimension.ZERO: 0>"
             out_type_parts.append(str(attr.value))
 
     out_type_name = "".join(out_type_parts)
