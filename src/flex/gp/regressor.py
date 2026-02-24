@@ -69,7 +69,6 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         num_islands: number of islands (for a multi-island model).
         remove_init_duplicates: whether to remove duplicate individuals from
             the initial populations.
-        crossover_prob: cross-over probability.
         mig_freq: migration frequency (in generations).
         mig_frac: fraction of individuals exchanged during migration.
         crossover_prob: probability of applying crossover.
@@ -101,9 +100,6 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         max_calls: maximum number of tasks a Ray worker can execute before restart.
             The default is `0`, which means infinite number of tasks.
         custom_logger: user-defined logging function called with the best individuals.
-        special_term_name: name used for ephemeral constants during SymPy conversion.
-        sympy_conversion_rules: mapping from GP primitives (DEAP) to SymPy primitives.
-            The default is `None`, which means that sympy conversion is disabled.
         multiprocessing: whether to use Ray for parallel fitness evaluation.
     """
 
@@ -148,8 +144,6 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         num_cpus: int = 1,
         max_calls: int = 0,
         custom_logger: Callable = None,
-        special_term_name: str = "c",
-        sympy_conversion_rules: Dict = None,
         multiprocessing: bool = True,
     ):
         super().__init__()
@@ -199,8 +193,6 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         self.remove_init_duplicates = remove_init_duplicates
         self.max_calls = max_calls
         self.custom_logger = custom_logger
-        self.special_term_name = special_term_name
-        self.sympy_conversion_rules = sympy_conversion_rules
         self.multiprocessing = multiprocessing
 
     def __sklearn_tags__(self):
@@ -906,18 +898,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
 
         self.__last_gen = self.__cgen
 
-        # define sympy representation of the best individual
-        if self.sympy_conversion_rules is not None:
-            self.__best_sympy = parse_expr(
-                stringify_for_sympy(
-                    self._best, self.sympy_conversion_rules, self.special_term_name
-                )
-            )
-            best_str = self.__best_sympy
-        else:
-            best_str = self._best
-
-        self.__print(f"The best individual is {best_str}")
+        self.__print(f"The best individual is {self._best}")
 
         self.__print(
             f"The best fitness on the training set is {self.__train_fit_history[-1]}"
@@ -960,15 +941,24 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
                 join(output_path, "val_score_history.npy"), self.__val_score_history
             )
 
-    def get_best_individual_sympy(self):
+    def get_best_individual_sympy(
+        self, sympy_conversion_rules: Dict, special_term_name: str = "c"
+    ):
         """Returns the SymPy expression of the best individual.
+
+        Args:
+            sympy_conversion_rules: mapping from GP primitives (DEAP) to SymPy
+                primitives.
+            special_term_name: name used for constants during SymPy conversion.
 
         Returns:
             sympy representation of the best individual if conversion is enabled.
         """
 
-        if self.sympy_conversion_rules is not None:
-            return self.__best_sympy
+        best_sympy = parse_expr(
+            stringify_for_sympy(self._best, sympy_conversion_rules, special_term_name)
+        )
+        return best_sympy
 
     def get_train_fit_history(self):
         """Returns the training score history.
