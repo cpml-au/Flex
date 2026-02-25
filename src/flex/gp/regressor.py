@@ -9,6 +9,7 @@ import ray
 import random
 from flex.gp.util import mapper, max_func, min_func, avg_func, std_func, fitness_value
 from flex.gp.sympy import stringify_for_sympy
+from flex.gp.numpy_primitives import conversion_rules
 from sklearn.base import BaseEstimator, RegressorMixin
 from sklearn.utils.validation import check_is_fitted, validate_data
 from sympy.parsing.sympy_parser import parse_expr
@@ -942,7 +943,9 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             )
 
     def get_best_individual_sympy(
-        self, sympy_conversion_rules: Dict, special_term_name: str = "c"
+        self,
+        sympy_conversion_rules: Dict = conversion_rules,
+        special_term_name: str = "c",
     ):
         """Returns the SymPy expression of the best individual.
 
