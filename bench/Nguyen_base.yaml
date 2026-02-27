@@ -1,0 +1,51 @@
+gp:
+  num_individuals: 2000 # 1000
+  generations: 100 # 200
+  multi_island:
+    num_islands: 1 # 15
+    migration: { "freq": 10, "frac": 0.05 }
+  crossover_prob: 0.5
+  mut_prob: 0.5
+  frac_elitist: 0.
+  min_: 2
+  max_: 5
+  overlapping_generation: True
+  validate: False
+  penalty: { "reg_param": 1.e-5 }
+  select:
+    # fun: tools.selection.tournament_with_elitism
+    # kargs: "{'tournsize': 2, 'stochastic_tourn': { 'enabled': True, 'prob': [0.7, 0.3] }}"
+    # fun: tools.selection.selStochasticUniversalSampling
+    fun: random.sample
+    kargs: "{'k': self.num_individuals}"
+  mutate:
+    fun: gp.mixedMutate
+    kargs: "{'expr': toolbox.expr_mut, 'pset': pset, 'prob': [0.7, 0.2, 0.1]}" # string is important
+    expr_mut: gp.genHalfAndHalf
+    expr_mut_kargs: "{'min_': 1, 'max_': 2}"
+  crossover:
+    fun: gp.cxOnePoint
+    kargs: "{}"
+  scaleXy: False
+  batch_size: 200
+  use_constants: False
+  remove_init_duplicates: True
+  primitives:
+    imports:
+      {
+        "flex.gp.numpy_primitives": ["numpy_primitives"],
+      }
+    used: [
+        { "name": "add", "dimension": null, "rank": null },
+        { "name": "sub", "dimension": null, "rank": null },
+        { "name": "mul", "dimension": null, "rank": null },
+        # { "name": "div", "dimension": null, "rank": null },
+        { "name": "aq", "dimension": null, "rank": null },
+        # { "name": "square", "dimension": null, "rank": null },
+        { "name": "sin", "dimension": null, "rank": null },
+        # { "name": "arcsin", "dimension": null, "rank": null },
+        # { "name": "cos", "dimension": null, "rank": null },
+        # { "name": "arccos", "dimension": null, "rank": null },
+        { "name": "exp", "dimension": null, "rank": null },
+        { "name": "log", "dimension": null, "rank": null },
+      ]

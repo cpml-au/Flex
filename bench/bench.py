@@ -28,7 +28,7 @@ from functools import partial
 import optuna
 
 num_cpus = 1
-num_runs = 1  # 20
+# num_runs = 1  # 20
 
 
 def check_trig_fn(ind):
@@ -299,11 +299,6 @@ def eval(problem, cfgfile, seed=42, grid_search=False):
     r2_train = r2_score(y_train_scaled, pred_train)
     print("MSE on the training set = ", MSE)
     print("R^2 on the training set = ", r2_train)
-    # Nguyen
-    # if MSE <= 1e-10 or (problem == "Nguyen-13" and MSE <= 1e-5):
-    #     return 1.0
-    # else:
-    #     return 0.0
 
     return r2_train, r2_test
 
@@ -311,22 +306,6 @@ def eval(problem, cfgfile, seed=42, grid_search=False):
 if __name__ == "__main__":
     import argparse
     import pathlib
-
-    # problems = [
-    #     "Nguyen-1",
-    #     "Nguyen-2",
-    #     "Nguyen-3",
-    #     "Nguyen-4",
-    #     "Nguyen-5",
-    #     "Nguyen-6",
-    #     "Nguyen-7",
-    #     "Nguyen-8",
-    #     "Nguyen-9",
-    #     "Nguyen-10",
-    #     "Nguyen-11",
-    #     "Nguyen-12",
-    #     "Nguyen-13",
-    # ]
 
     parser = argparse.ArgumentParser()
 
@@ -347,8 +326,6 @@ if __name__ == "__main__":
 
     problem = args.problem
     cfgfile = args.cfgfile
-
-    # problem = "1089_USCrime"
 
     seeds = [29802, 22118, 860, 15795, 21575, 5390, 11964, 6265, 23654, 11284]
 
@@ -386,16 +363,3 @@ if __name__ == "__main__":
     print("Median Test R^2 = ", np.median(r2_tests))
 
     ray.shutdown()
-    # Nguyen
-    # ave_success_rate = 0.0
-    # with open("bench_stats.txt", "w") as file:
-    #     for problem in problems:
-    #         success = 0.0
-    #         for i in range(num_runs):
-    #             print("Problem {prb}, RUN #{num}".format(prb=problem, num=i))
-    #             success += bench(problem=problem)
-    #         success_rate = success / num_runs * 100
-    #         ave_success_rate += success_rate / len(problems)
-    #         str_to_print = problem + " " + str(success_rate)
-    #         print(str_to_print, file=file, flush=True)
-    #     print("Average success rate = ", ave_success_rate)
