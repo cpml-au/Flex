@@ -1,8 +1,8 @@
 # python bench.py Nguyen_base.yaml Nguyen-1 
 # python bench.py Nguyen_base.yaml Nguyen-2 
 # python bench.py Nguyen_base.yaml Nguyen-3 
-# python bench.py Nguyen_base.yaml Nguyen-4 
-python bench.py Nguyen_base.yaml Nguyen-5 
+python bench.py Nguyen_base.yaml Nguyen-4 
+# python bench.py Nguyen_base.yaml Nguyen-5 
 # python bench.py Nguyen_base.yaml Nguyen-6 
 # python bench.py Nguyen_base.yaml Nguyen-7 
 # python bench.py Nguyen_base.yaml Nguyen-8 

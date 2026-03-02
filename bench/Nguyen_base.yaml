@@ -2,16 +2,16 @@ gp:
   num_individuals: 500 # 1000
   generations: 100 # 200
   multi_island:
-    num_islands: 4 # 15
-    migration: { "freq": 5, "frac": 0.1 }
-  crossover_prob: 0.8
-  mut_prob: 0.2
+    num_islands: 5 # 15
+    migration: { "freq": 5, "frac": 0.05 }
+  crossover_prob: 1.
+  mut_prob: 0.3
   frac_elitist: 0.
   min_: 2
   max_: 5
   overlapping_generation: True
   validate: False
-  penalty: { "reg_param": 1.e-7, "fitness": "mse" }
+  penalty: { "reg_param": 1.e-5, "age_reg_param": 0.e-6 }
   select:
     # fun: tools.selection.tournament_with_elitism
     # kargs: "{'tournsize': 2, 'stochastic_tourn': { 'enabled': True, 'prob': [0.7, 0.3] }}"
@@ -24,10 +24,11 @@ gp:
     expr_mut: gp.genHalfAndHalf
     expr_mut_kargs: "{'min_': 1, 'max_': 2}"
   crossover:
-    fun: operators.cxOnePointSameDepth
+    # fun: operators.cxOnePointSameDepth
+    fun: gp.cxOnePoint
     kargs: "{}"
   scaleXy: False
-  tarpeian_length_threshold: 40
+  tarpeian_length_threshold: 30
   final_model_selection: mse
   batch_size: 200
   use_constants: False

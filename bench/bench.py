@@ -59,6 +59,29 @@ def compute_MSE(individual, X, y, consts=[]):
     return MSE
 
 
+def sanitize_array_for_metrics(arr, name, clip_value=1e150):
+    """Return a finite float64 array suitable for metric computation."""
+    arr = np.asarray(arr, dtype=np.float64).reshape(-1)
+    non_finite_mask = ~np.isfinite(arr)
+    if np.any(non_finite_mask):
+        print(
+            f"Warning: {name} contains {int(np.sum(non_finite_mask))} non-finite values. "
+            "Replacing/clipping before metric computation."
+        )
+    arr = np.nan_to_num(arr, nan=0.0, posinf=clip_value, neginf=-clip_value)
+    arr = np.clip(arr, -clip_value, clip_value)
+    return arr
+
+
+def safe_r2_score(y_true, y_pred):
+    """Robust R^2 computation that avoids crashing on bad numeric values."""
+    try:
+        return r2_score(y_true, y_pred)
+    except ValueError as exc:
+        print(f"Warning: r2_score failed ({exc}). Returning NaN.")
+        return np.nan
+
+
 def gaussian_iid_negative_log_likelihood(mse, n_samples):
     """Total Gaussian i.i.d. negative log-likelihood with MLE variance."""
     eps = 1e-12
@@ -76,13 +99,8 @@ def bic_gaussian_iid(mse, n_samples, model_size):
 
 
 def compute_fitness_value(MSE, n_samples, model_size, penalty):
-    fitness_method = penalty.get("fitness", "mse")
-
-    # Keep "mdl_gaussian_iid" as a compatibility alias.
-    if fitness_method in ("bic_gaussian_iid", "mdl_gaussian_iid"):
-        return bic_gaussian_iid(MSE, n_samples, model_size)
-
-    # Backward-compatible default
+    # Evolution fitness: only MSE + linear size regularization.
+    # BIC is reserved for optional final model selection at the end.
     return MSE + penalty["reg_param"] * model_size
 
 
@@ -237,18 +255,28 @@ def compute_attributes(
             fitness = (1e8,)
         else:
             MSE, consts = eval_MSE_and_tune_constants(tree, toolbox, X, y)
-            num_consts = len(consts)
-            model_size = individ_length[i] + num_consts
-            fitness_value = compute_fitness_value(
-                MSE=MSE,
-                n_samples=y.shape[0],
-                model_size=model_size,
-                penalty=penalty,
-            )
-            fitness = (
-                fitness_scale
-                * (fitness_value + 100000 * nested_trigs[i] + 0.0 * num_trigs[i]),
-            )
+            if MSE < 1e-12:
+                # Keep fitness equal to pure error so early stopping can trigger.
+                fitness = (fitness_scale * MSE,)
+            else:
+                num_consts = len(consts)
+                model_size = individ_length[i] + num_consts
+                age_penalty = penalty.get("age_reg_param", 0.0) * getattr(tree, "age", 0)
+                fitness_value = compute_fitness_value(
+                    MSE=MSE,
+                    n_samples=y.shape[0],
+                    model_size=model_size,
+                    penalty=penalty,
+                )
+                fitness = (
+                    fitness_scale
+                    * (
+                        fitness_value
+                        + age_penalty
+                        + 100000 * nested_trigs[i]
+                        + 0.0 * num_trigs[i]
+                    ),
+                )
         attributes[i] = {"consts": consts, "fitness": fitness}
     return attributes
 
@@ -320,8 +348,9 @@ def eval(problem, cfgfile, seed=42, grid_search=False):
         seed_str=None,
         batch_size=batch_size,
         num_cpus=num_cpus,
-        remove_init_duplicates=True,
-        save_detailed_log=True,
+        remove_init_duplicates=False,
+        save_detailed_log=False,
+        early_stop_fitness_threshold=1e-12,
         **regressor_params,
     )
 
@@ -387,8 +416,10 @@ def eval(problem, cfgfile, seed=42, grid_search=False):
     if scaleXy:
         u_best = scaler_y.inverse_transform(u_best.reshape(-1, 1)).flatten()
 
-    MSE = np.mean((u_best - y_test) ** 2)
-    r2_test = r2_score(y_test, u_best)
+    y_test_safe = sanitize_array_for_metrics(y_test, "y_test")
+    u_best_safe = sanitize_array_for_metrics(u_best, "u_best")
+    MSE = np.mean((u_best_safe - y_test_safe) ** 2)
+    r2_test = safe_r2_score(y_test_safe, u_best_safe)
     print("MSE on the test set = ", MSE)
     print("R^2 on the test set = ", r2_test)
 
@@ -400,8 +431,10 @@ def eval(problem, cfgfile, seed=42, grid_search=False):
             y_train_scaled.reshape(-1, 1)
         ).flatten()
 
-    MSE = np.mean((pred_train - y_train_scaled) ** 2)
-    r2_train = r2_score(y_train_scaled, pred_train)
+    y_train_safe = sanitize_array_for_metrics(y_train_scaled, "y_train")
+    pred_train_safe = sanitize_array_for_metrics(pred_train, "pred_train")
+    MSE = np.mean((pred_train_safe - y_train_safe) ** 2)
+    r2_train = safe_r2_score(y_train_safe, pred_train_safe)
     print("MSE on the training set = ", MSE)
     print("R^2 on the training set = ", r2_train)
 
@@ -432,8 +465,7 @@ if __name__ == "__main__":
     problem = args.problem
     cfgfile = args.cfgfile
 
-    # seeds = [29802, 22118, 860, 15795, 21575, 5390, 11964, 6265, 23654, 11284]
-    seeds = [29802]
+    seeds = [29802, 22118, 860, 15795, 21575, 5390, 11964, 6265, 23654, 11284]
 
     r2_tests = []
 

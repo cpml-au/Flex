@@ -100,6 +100,8 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         save_detailed_log: whether to save a per-generation population log with
             each individual string, size, fitness, and island index.
         detailed_log_filename: file name used for detailed population logging.
+        early_stop_fitness_threshold: if set, stop evolution early when the best
+            training fitness is less than or equal to this threshold.
         output_path: directory where outputs are saved.
         batch_size : batch size used for Ray-based fitness evaluation.
         num_cpus: number of CPUs allocated to each Ray task.
@@ -147,6 +149,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         save_train_fit_history: bool = False,
         save_detailed_log: bool = False,
         detailed_log_filename: str = "population_detailed_log.csv",
+        early_stop_fitness_threshold: float | None = None,
         output_path: str | None = None,
         batch_size: int = 1,
         num_cpus: int = 1,
@@ -169,6 +172,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         self.save_train_fit_history = save_train_fit_history
         self.save_detailed_log = save_detailed_log
         self.detailed_log_filename = detailed_log_filename
+        self.early_stop_fitness_threshold = early_stop_fitness_threshold
         self.output_path = output_path
         self.batch_size = batch_size
 
@@ -690,16 +694,17 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
 
             # Apply crossover and mutation to the offspring with elitism
             elite_inds[i] = tools.selBest(offsprings[i], self.n_elitist)
-            offsprings[i] = elite_inds[i] + algorithms.varOr(
-                offsprings[i],
+            offsprings[i] = elite_inds[i] + algorithms.varAnd(
+                offsprings[i][: self.num_individuals - self.n_elitist],
                 toolbox,
-                self.num_individuals - self.n_elitist,
                 self.crossover_prob,
                 self.mut_prob,
             )
 
             # add individuals subject to cross-over and mutation to the list of invalids
             invalid_inds[i] = [ind for ind in offsprings[i] if not ind.fitness.valid]
+            for ind in invalid_inds[i]:
+                ind._newborn = True
 
             num_evals += len(invalid_inds[i])
 
@@ -730,6 +735,15 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
                 self.__pop[i] = tools.selBest(
                     self.__pop[i] + offsprings[i], self.num_individuals
                 )
+
+            # Update individual ages after survival.
+            for ind in self.__pop[i]:
+                if getattr(ind, "_newborn", False):
+                    ind.age = 0
+                else:
+                    ind.age = getattr(ind, "age", 0) + 1
+                if hasattr(ind, "_newborn"):
+                    delattr(ind, "_newborn")
 
         # migrations among islands
         if cgen % self.mig_frac == 0 and self.num_islands > 1:
@@ -857,6 +871,8 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         self.__pop = [None] * self.num_islands
         for i in range(self.num_islands):
             self.__pop[i] = toolbox.population(n=self.num_individuals)
+            for ind in self.__pop[i]:
+                ind.age = 0
 
         # Seeds the first island with individuals
         if self.seed_str is not None:
@@ -920,6 +936,18 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             self.__cgen = gen + 1
 
             self._step(toolbox, self.__cgen)
+            if (
+                self.early_stop_fitness_threshold is not None
+                and self._best.fitness.valid
+                and len(self._best.fitness.values) > 0
+                and self._best.fitness.values[0] <= self.early_stop_fitness_threshold
+            ):
+                self.__print(
+                    "Early stopping: best fitness "
+                    f"{self._best.fitness.values[0]} <= threshold "
+                    f"{self.early_stop_fitness_threshold}."
+                )
+                break
             if self.save_detailed_log and self.output_path is not None:
                 self.__append_detailed_log(generation=self.__cgen)
 
