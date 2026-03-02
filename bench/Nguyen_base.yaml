@@ -1,17 +1,17 @@
 gp:
-  num_individuals: 2000 # 1000
+  num_individuals: 1000 # 1000
   generations: 100 # 200
   multi_island:
-    num_islands: 1 # 15
+    num_islands: 4 # 15
     migration: { "freq": 10, "frac": 0.05 }
-  crossover_prob: 0.5
-  mut_prob: 0.5
+  crossover_prob: 0.
+  mut_prob: 1.0
   frac_elitist: 0.
   min_: 2
   max_: 5
   overlapping_generation: True
   validate: False
-  penalty: { "reg_param": 1.e-5 }
+  penalty: { "reg_param": 0., "fitness": "mdl_gaussian_iid" }
   select:
     # fun: tools.selection.tournament_with_elitism
     # kargs: "{'tournsize': 2, 'stochastic_tourn': { 'enabled': True, 'prob': [0.7, 0.3] }}"

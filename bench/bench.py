@@ -28,7 +28,6 @@ from functools import partial
 import optuna
 
 num_cpus = 1
-# num_runs = 1  # 20
 
 
 def check_trig_fn(ind):
@@ -58,6 +57,33 @@ def compute_MSE(individual, X, y, consts=[]):
         MSE = 1e8
 
     return MSE
+
+
+def gaussian_iid_negative_log_likelihood(mse, n_samples):
+    """Total Gaussian i.i.d. negative log-likelihood with MLE variance."""
+    eps = 1e-12
+    sigma2 = max(mse, eps)
+    n = max(int(n_samples), 1)
+    return 0.5 * n * (np.log(2.0 * np.pi * sigma2) + 1.0)
+
+
+def bic_gaussian_iid(mse, n_samples, model_size):
+    """Bayesian Information Criterion under Gaussian i.i.d. residuals."""
+    nll = gaussian_iid_negative_log_likelihood(mse, n_samples)
+    n = max(int(n_samples), 2)
+    k = max(int(model_size), 1)
+    return 2.0 * nll + k * np.log(n)
+
+
+def compute_fitness_value(MSE, n_samples, model_size, penalty):
+    fitness_method = penalty.get("fitness", "mse")
+
+    # Keep "mdl_gaussian_iid" as a compatibility alias.
+    if fitness_method in ("bic_gaussian_iid", "mdl_gaussian_iid"):
+        return bic_gaussian_iid(MSE, n_samples, model_size)
+
+    # Backward-compatible default
+    return MSE + penalty["reg_param"] * model_size
 
 
 def eval_MSE_and_tune_constants(tree, toolbox, X, y):
@@ -155,13 +181,20 @@ def compute_attributes(individuals_batch, toolbox, X, y, penalty, fitness_scale)
             fitness = (1e8,)
         else:
             MSE, consts = eval_MSE_and_tune_constants(tree, toolbox, X, y)
+            num_consts = len(consts)
+            model_size = individ_length[i] + num_consts
+            fitness_value = compute_fitness_value(
+                MSE=MSE,
+                n_samples=y.shape[0],
+                model_size=model_size,
+                penalty=penalty,
+            )
             fitness = (
                 fitness_scale
                 * (
-                    MSE
+                    fitness_value
                     + 100000 * nested_trigs[i]
                     + 0.0 * num_trigs[i]
-                    + penalty["reg_param"] * individ_length[i]
                 ),
             )
         attributes[i] = {"consts": consts, "fitness": fitness}

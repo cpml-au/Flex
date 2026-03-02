@@ -891,10 +891,6 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
 
             self._step(toolbox, self.__cgen)
 
-            if self._best.fitness.values[0] <= 1e-15:
-                self.__print("Fitness threshold reached - STOPPING.")
-                break
-
         self.__print(" -= END OF EVOLUTION =- ")
 
         self.__last_gen = self.__cgen
