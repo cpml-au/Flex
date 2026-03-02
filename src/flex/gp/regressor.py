@@ -2,6 +2,7 @@ from deap import algorithms, tools, gp, base, creator
 from deap.tools import migRing
 import numpy as np
 import operator
+import csv
 from typing import List, Dict, Callable
 from os.path import join
 import os
@@ -95,6 +96,9 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         save_best_individual: whether to save the string representation of the best
             individual.
         save_train_fit_history: whether to save the training fitness history.
+        save_detailed_log: whether to save a per-generation population log with
+            each individual string, size, fitness, and island index.
+        detailed_log_filename: file name used for detailed population logging.
         output_path: directory where outputs are saved.
         batch_size : batch size used for Ray-based fitness evaluation.
         num_cpus: number of CPUs allocated to each Ray task.
@@ -140,6 +144,8 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         num_best_inds_str: int = 1,
         save_best_individual: bool = False,
         save_train_fit_history: bool = False,
+        save_detailed_log: bool = False,
+        detailed_log_filename: str = "population_detailed_log.csv",
         output_path: str | None = None,
         batch_size: int = 1,
         num_cpus: int = 1,
@@ -160,6 +166,8 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         self.callback_func = callback_func
         self.save_best_individual = save_best_individual
         self.save_train_fit_history = save_train_fit_history
+        self.save_detailed_log = save_detailed_log
+        self.detailed_log_filename = detailed_log_filename
         self.output_path = output_path
         self.batch_size = batch_size
 
@@ -776,6 +784,20 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         best_inds = tools.selBest(self.__flatten_list(self.__pop), k=n_ind)
         return best_inds[:n_ind]
 
+    def get_population_individuals(self, by_island: bool = False):
+        """Returns individuals from the current population.
+
+        Args:
+            by_island: if True, return a list of populations (one per island);
+                otherwise return a single flattened list.
+
+        Returns:
+            current population individuals.
+        """
+        if by_island:
+            return self.__pop
+        return self.__flatten_list(self.__pop)
+
     def _step(self, toolbox: base.Toolbox, cgen: int):
         """Performs a single step of the evolution pipeline.
 
@@ -876,10 +898,17 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         self._generate_init_pop(toolbox)
         self.__print("DONE.")
 
+        if self.save_detailed_log and self.output_path is not None:
+            os.makedirs(self.output_path, exist_ok=True)
+            self.__init_detailed_log_file(self.output_path)
+
         # Evaluate the fitness of the entire population on the training set
         self.__print("Evaluating initial population(s)...")
         self._evaluate_init_pop(toolbox)
         self.__print("DONE.")
+        if self.save_detailed_log and self.output_path is not None:
+            # Generation 0 corresponds to the initialized-and-evaluated populations.
+            self.__append_detailed_log(generation=0)
 
         if self.validate:
             self.__print("Using validation dataset.")
@@ -890,6 +919,8 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             self.__cgen = gen + 1
 
             self._step(toolbox, self.__cgen)
+            if self.save_detailed_log and self.output_path is not None:
+                self.__append_detailed_log(generation=self.__cgen)
 
         self.__print(" -= END OF EVOLUTION =- ")
 
@@ -914,6 +945,12 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             self.__save_train_fit_history(self.output_path)
             self.__print("Training fitness history saved to disk.")
 
+        if self.save_detailed_log and self.output_path is not None:
+            self.__print(
+                f"Detailed population log saved to "
+                f"{join(self.output_path, self.detailed_log_filename)}."
+            )
+
         # NOTE: ray.shutdown should be manually called by the user
 
     def __save_best_individual(self, output_path: str):
@@ -937,6 +974,39 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             np.save(
                 join(output_path, "val_score_history.npy"), self.__val_score_history
             )
+
+    def __init_detailed_log_file(self, output_path: str):
+        """Initializes the CSV file used for detailed population logging."""
+        path = join(output_path, self.detailed_log_filename)
+        with open(path, "w", newline="") as file:
+            writer = csv.writer(file)
+            writer.writerow(
+                ["generation", "island", "individual_idx", "length", "fitness", "expr"]
+            )
+
+    def __append_detailed_log(self, generation: int):
+        """Appends one snapshot of all islands/populations to the detailed log."""
+        if self.output_path is None:
+            return
+        path = join(self.output_path, self.detailed_log_filename)
+        with open(path, "a", newline="") as file:
+            writer = csv.writer(file)
+            for island_idx, island_pop in enumerate(self.__pop):
+                for individual_idx, ind in enumerate(island_pop):
+                    if ind.fitness.valid and len(ind.fitness.values) > 0:
+                        fit = float(ind.fitness.values[0])
+                    else:
+                        fit = np.nan
+                    writer.writerow(
+                        [
+                            generation,
+                            island_idx,
+                            individual_idx,
+                            len(ind),
+                            fit,
+                            str(ind),
+                        ]
+                    )
 
     def get_best_individual_sympy(
         self,

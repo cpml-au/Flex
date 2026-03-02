@@ -1,35 +1,36 @@
 gp:
-  num_individuals: 1000 # 1000
+  num_individuals: 500 # 1000
   generations: 100 # 200
   multi_island:
-    num_islands: 4 # 15
+    num_islands: 8 # 15
     migration: { "freq": 10, "frac": 0.05 }
-  crossover_prob: 0.
-  mut_prob: 1.0
+  crossover_prob: 0.5
+  mut_prob: 0.5
   frac_elitist: 0.
   min_: 2
   max_: 5
   overlapping_generation: True
   validate: False
-  penalty: { "reg_param": 0., "fitness": "mdl_gaussian_iid" }
+  penalty: { "reg_param": 1.e-8, "fitness": "mse" }
   select:
     # fun: tools.selection.tournament_with_elitism
     # kargs: "{'tournsize': 2, 'stochastic_tourn': { 'enabled': True, 'prob': [0.7, 0.3] }}"
-    # fun: tools.selection.selStochasticUniversalSampling
-    fun: random.sample
+    fun: tools.selection.selStochasticUniversalSampling
+    # fun: random.sample
     kargs: "{'k': self.num_individuals}"
   mutate:
     fun: gp.mixedMutate
     kargs: "{'expr': toolbox.expr_mut, 'pset': pset, 'prob': [0.7, 0.2, 0.1]}" # string is important
     expr_mut: gp.genHalfAndHalf
-    expr_mut_kargs: "{'min_': 1, 'max_': 2}"
+    expr_mut_kargs: "{'min_': 1, 'max_': 4}"
   crossover:
     fun: gp.cxOnePoint
     kargs: "{}"
   scaleXy: False
+  final_model_selection: bic
   batch_size: 200
   use_constants: False
-  remove_init_duplicates: True
+  remove_init_duplicates: False
   primitives:
     imports:
       {

@@ -1,5 +1,5 @@
 # import matplotlib.pyplot as plt
-from deap import gp
+from deap import gp, base
 
 from flex.gp import regressor as gps
 from flex.gp.util import (
@@ -84,6 +84,37 @@ def compute_fitness_value(MSE, n_samples, model_size, penalty):
 
     # Backward-compatible default
     return MSE + penalty["reg_param"] * model_size
+
+
+def select_best_model_by_bic(estimator, pset, X, y):
+    """
+    Select best individual in the final population using BIC.
+
+    This is intended for end-of-evolution model selection only.
+    """
+    toolbox = base.Toolbox()
+    toolbox.register("compile", gp.compile, pset=pset)
+
+    best = None
+    best_bic = np.inf
+
+    for ind in estimator.get_population_individuals():
+        consts = getattr(ind, "consts", [])
+        if consts is None:
+            continue
+        callable, _ = compile_individual_with_consts(ind, toolbox)
+        mse = compute_MSE(callable, X, y, consts=consts)
+        model_size = len(ind) + len(consts)
+        bic = bic_gaussian_iid(mse, y.shape[0], model_size)
+        if bic < best_bic:
+            best_bic = bic
+            best = ind
+
+    if best is None:
+        raise RuntimeError("Unable to select a best model by BIC from final population.")
+
+    estimator._best = best
+    return best, best_bic
 
 
 def eval_MSE_and_tune_constants(tree, toolbox, X, y):
@@ -262,6 +293,7 @@ def eval(problem, cfgfile, seed=42, grid_search=False):
         batch_size=batch_size,
         num_cpus=num_cpus,
         remove_init_duplicates=True,
+        save_detailed_log=True,
         **regressor_params,
     )
 
@@ -295,7 +327,17 @@ def eval(problem, cfgfile, seed=42, grid_search=False):
     else:
         best_estimator = est
 
-    best = best_estimator.get_best_individuals(n_ind=1)[0]
+    final_model_selection = config_file_data["gp"].get("final_model_selection", "fitness")
+    if final_model_selection == "bic":
+        best, best_bic = select_best_model_by_bic(
+            estimator=best_estimator,
+            pset=pset,
+            X=X_train_scaled,
+            y=y_train_scaled,
+        )
+        print("Final model selected by BIC = ", best_bic)
+    else:
+        best = best_estimator.get_best_individuals(n_ind=1)[0]
 
     if hasattr(best, "consts"):
         print("Best parameters = ", best.consts)
@@ -360,7 +402,8 @@ if __name__ == "__main__":
     problem = args.problem
     cfgfile = args.cfgfile
 
-    seeds = [29802, 22118, 860, 15795, 21575, 5390, 11964, 6265, 23654, 11284]
+    # seeds = [29802, 22118, 860, 15795, 21575, 5390, 11964, 6265, 23654, 11284]
+    seeds = [29802]
 
     r2_tests = []
 
