@@ -111,7 +111,9 @@ def select_best_model_by_bic(estimator, pset, X, y):
             best = ind
 
     if best is None:
-        raise RuntimeError("Unable to select a best model by BIC from final population.")
+        raise RuntimeError(
+            "Unable to select a best model by BIC from final population."
+        )
 
     estimator._best = best
     return best, best_bic
@@ -176,7 +178,14 @@ def get_features_batch(
     return individ_length, nested_trigs, num_trigs
 
 
-def predict(individuals_batch, toolbox, X, penalty, fitness_scale):
+def predict(
+    individuals_batch,
+    toolbox,
+    X,
+    penalty,
+    fitness_scale,
+    tarpeian_length_threshold,
+):
 
     predictions = [None] * len(individuals_batch)
 
@@ -187,7 +196,15 @@ def predict(individuals_batch, toolbox, X, penalty, fitness_scale):
     return predictions
 
 
-def compute_MSEs(individuals_batch, toolbox, X, y, penalty, fitness_scale):
+def compute_MSEs(
+    individuals_batch,
+    toolbox,
+    X,
+    y,
+    penalty,
+    fitness_scale,
+    tarpeian_length_threshold,
+):
 
     total_errs = [None] * len(individuals_batch)
 
@@ -198,7 +215,15 @@ def compute_MSEs(individuals_batch, toolbox, X, y, penalty, fitness_scale):
     return total_errs
 
 
-def compute_attributes(individuals_batch, toolbox, X, y, penalty, fitness_scale):
+def compute_attributes(
+    individuals_batch,
+    toolbox,
+    X,
+    y,
+    penalty,
+    fitness_scale,
+    tarpeian_length_threshold,
+):
 
     attributes = [None] * len(individuals_batch)
 
@@ -207,7 +232,7 @@ def compute_attributes(individuals_batch, toolbox, X, y, penalty, fitness_scale)
     for i, tree in enumerate(individuals_batch):
 
         # Tarpeian selection
-        if individ_length[i] >= 50:
+        if individ_length[i] >= tarpeian_length_threshold:
             consts = None
             fitness = (1e8,)
         else:
@@ -222,11 +247,7 @@ def compute_attributes(individuals_batch, toolbox, X, y, penalty, fitness_scale)
             )
             fitness = (
                 fitness_scale
-                * (
-                    fitness_value
-                    + 100000 * nested_trigs[i]
-                    + 0.0 * num_trigs[i]
-                ),
+                * (fitness_value + 100000 * nested_trigs[i] + 0.0 * num_trigs[i]),
             )
         attributes[i] = {"consts": consts, "fitness": fitness}
     return attributes
@@ -276,7 +297,14 @@ def eval(problem, cfgfile, seed=42, grid_search=False):
     fitness_scale = 1.0
 
     penalty = config_file_data["gp"]["penalty"]
-    common_params = {"penalty": penalty, "fitness_scale": fitness_scale}
+    tarpeian_length_threshold = config_file_data["gp"].get(
+        "tarpeian_length_threshold", 40
+    )
+    common_params = {
+        "penalty": penalty,
+        "fitness_scale": fitness_scale,
+        "tarpeian_length_threshold": tarpeian_length_threshold,
+    }
 
     gpsr = gps.GPSymbolicRegressor(
         pset_config=pset,
@@ -327,7 +355,9 @@ def eval(problem, cfgfile, seed=42, grid_search=False):
     else:
         best_estimator = est
 
-    final_model_selection = config_file_data["gp"].get("final_model_selection", "fitness")
+    final_model_selection = config_file_data["gp"].get(
+        "final_model_selection", "fitness"
+    )
     if final_model_selection == "bic":
         best, best_bic = select_best_model_by_bic(
             estimator=best_estimator,
@@ -335,7 +365,7 @@ def eval(problem, cfgfile, seed=42, grid_search=False):
             X=X_train_scaled,
             y=y_train_scaled,
         )
-        print("Final model selected by BIC = ", best_bic)
+        print("Final model selected by BIC = ", str(gpsr.get_best_individual_sympy()))
     else:
         best = best_estimator.get_best_individuals(n_ind=1)[0]
 

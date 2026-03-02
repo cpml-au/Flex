@@ -2,16 +2,16 @@ gp:
   num_individuals: 500 # 1000
   generations: 100 # 200
   multi_island:
-    num_islands: 8 # 15
-    migration: { "freq": 10, "frac": 0.05 }
-  crossover_prob: 0.5
-  mut_prob: 0.5
+    num_islands: 4 # 15
+    migration: { "freq": 5, "frac": 0.1 }
+  crossover_prob: 0.8
+  mut_prob: 0.2
   frac_elitist: 0.
   min_: 2
   max_: 5
   overlapping_generation: True
   validate: False
-  penalty: { "reg_param": 1.e-8, "fitness": "mse" }
+  penalty: { "reg_param": 1.e-7, "fitness": "mse" }
   select:
     # fun: tools.selection.tournament_with_elitism
     # kargs: "{'tournsize': 2, 'stochastic_tourn': { 'enabled': True, 'prob': [0.7, 0.3] }}"
@@ -22,12 +22,13 @@ gp:
     fun: gp.mixedMutate
     kargs: "{'expr': toolbox.expr_mut, 'pset': pset, 'prob': [0.7, 0.2, 0.1]}" # string is important
     expr_mut: gp.genHalfAndHalf
-    expr_mut_kargs: "{'min_': 1, 'max_': 4}"
+    expr_mut_kargs: "{'min_': 1, 'max_': 2}"
   crossover:
-    fun: gp.cxOnePoint
+    fun: operators.cxOnePointSameDepth
     kargs: "{}"
   scaleXy: False
-  final_model_selection: bic
+  tarpeian_length_threshold: 40
+  final_model_selection: mse
   batch_size: 200
   use_constants: False
   remove_init_duplicates: False
@@ -45,7 +46,7 @@ gp:
         # { "name": "square", "dimension": null, "rank": null },
         { "name": "sin", "dimension": null, "rank": null },
         # { "name": "arcsin", "dimension": null, "rank": null },
-        # { "name": "cos", "dimension": null, "rank": null },
+        { "name": "cos", "dimension": null, "rank": null },
         # { "name": "arccos", "dimension": null, "rank": null },
         { "name": "exp", "dimension": null, "rank": null },
         { "name": "log", "dimension": null, "rank": null },
