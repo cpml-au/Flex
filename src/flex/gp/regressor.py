@@ -11,7 +11,6 @@ import random
 from flex.gp.util import mapper, max_func, min_func, avg_func, std_func, fitness_value
 from flex.gp.sympy import stringify_for_sympy
 from flex.gp.numpy_primitives import conversion_rules
-from flex.gp import operators
 from sklearn.base import BaseEstimator, RegressorMixin
 from sklearn.utils.validation import check_is_fitted, validate_data
 from sympy.parsing.sympy_parser import parse_expr
@@ -186,7 +185,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         self.num_islands = num_islands
         self.crossover_prob = crossover_prob
         self.mut_prob = mut_prob
-        self.variation_mechanism = variation_mechanism.lower()
+        self.variation_mechanism = variation_mechanism
         self.select_fun = select_fun
         self.select_args = select_args
         self.mut_fun = mut_fun
@@ -212,12 +211,6 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         self.max_calls = max_calls
         self.custom_logger = custom_logger
         self.multiprocessing = multiprocessing
-
-        if self.variation_mechanism not in ("varand", "varor"):
-            raise ValueError(
-                "variation_mechanism must be either 'varAnd' or 'varOr'. "
-                f"Got: {variation_mechanism}"
-            )
 
     def __sklearn_tags__(self):
         # since we are allowing cases in which y=None
@@ -704,20 +697,26 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
 
             # Apply crossover and mutation to the offspring with elitism
             elite_inds[i] = tools.selBest(offsprings[i], self.n_elitist)
-            if self.variation_mechanism == "varand":
+            variation_mechanism_norm = str(self.variation_mechanism).lower()
+            if variation_mechanism_norm == "varand":
                 varied_offspring = algorithms.varAnd(
                     offsprings[i][: self.num_individuals - self.n_elitist],
                     toolbox,
                     self.crossover_prob,
                     self.mut_prob,
                 )
-            else:
+            elif variation_mechanism_norm == "varor":
                 varied_offspring = algorithms.varOr(
                     offsprings[i],
                     toolbox,
                     self.num_individuals - self.n_elitist,
                     self.crossover_prob,
                     self.mut_prob,
+                )
+            else:
+                raise ValueError(
+                    "variation_mechanism must be either 'varAnd' or 'varOr'. "
+                    f"Got: {self.variation_mechanism}"
                 )
             offsprings[i] = elite_inds[i] + varied_offspring
 

@@ -26,6 +26,7 @@ from mygrad._utils.lock_management import mem_guard_off
 from functools import partial
 
 import optuna
+import sympy as sp
 
 num_cpus = 1
 
@@ -260,7 +261,9 @@ def compute_attributes(
             else:
                 num_consts = len(consts)
                 model_size = individ_length[i] + num_consts
-                age_penalty = penalty.get("age_reg_param", 0.0) * getattr(tree, "age", 0)
+                age_penalty = penalty.get("age_reg_param", 0.0) * getattr(
+                    tree, "age", 0
+                )
                 fitness_value = compute_fitness_value(
                     MSE=MSE,
                     n_samples=y.shape[0],
@@ -361,7 +364,7 @@ def eval(problem, cfgfile, seed=42, grid_search=False):
         }
 
         # wrap regressor inside an optuna CV search object
-        est = optuna.integration.OptunaSearchCV(
+        best_estimator = optuna.integration.OptunaSearchCV(
             gpsr,
             param,
             cv=5,
@@ -372,33 +375,36 @@ def eval(problem, cfgfile, seed=42, grid_search=False):
             timeout=3600,
         )
     else:
-        est = gpsr
+        best_estimator = gpsr
 
     tic = time.time()
-    est.fit(X_train_scaled, y_train_scaled)
+    best_estimator.fit(X_train_scaled, y_train_scaled)
     toc = time.time()
 
     if grid_search:
-        best_estimator = est.best_estimator_
+        best_estimator = best_estimator.best_estimator_
     else:
-        best_estimator = est
+        best_estimator = best_estimator
 
     final_model_selection = config_file_data["gp"].get(
         "final_model_selection", "fitness"
     )
     if final_model_selection == "bic":
-        best, best_bic = select_best_model_by_bic(
+        best_model, best_bic = select_best_model_by_bic(
             estimator=best_estimator,
             pset=pset,
             X=X_train_scaled,
             y=y_train_scaled,
         )
-        print("Final model selected by BIC = ", str(gpsr.get_best_individual_sympy()))
     else:
-        best = best_estimator.get_best_individuals(n_ind=1)[0]
+        best_model = best_estimator.get_best_individuals(n_ind=1)[0]
 
-    if hasattr(best, "consts"):
-        print("Best parameters = ", best.consts)
+    best_model_sympy = sp.simplify(best_estimator.get_best_individual_sympy())
+    best_model_str = str(best_model_sympy)
+    print("Best selected model = ", best_model_str)
+
+    if hasattr(best_model, "consts"):
+        print("Best parameters = ", best_model.consts)
 
     print("Elapsed time = ", toc - tic)
     individuals_per_sec = (
@@ -409,7 +415,7 @@ def eval(problem, cfgfile, seed=42, grid_search=False):
     )
     print("Individuals per sec = ", individuals_per_sec)
 
-    u_best = est.predict(X_test_scaled)
+    u_best = best_estimator.predict(X_test_scaled)
 
     # de-scale outputs before computing errors
     if scaleXy:
@@ -422,7 +428,7 @@ def eval(problem, cfgfile, seed=42, grid_search=False):
     print("MSE on the test set = ", MSE)
     print("R^2 on the test set = ", r2_test)
 
-    pred_train = est.predict(X_train_scaled)
+    pred_train = best_estimator.predict(X_train_scaled)
 
     if scaleXy:
         pred_train = scaler_y.inverse_transform(pred_train.reshape(-1, 1)).flatten()
@@ -437,7 +443,7 @@ def eval(problem, cfgfile, seed=42, grid_search=False):
     print("MSE on the training set = ", MSE)
     print("R^2 on the training set = ", r2_train)
 
-    return r2_train, r2_test
+    return r2_train, r2_test, best_model_str
 
 
 if __name__ == "__main__":
@@ -479,7 +485,7 @@ if __name__ == "__main__":
     for i, seed in enumerate(seeds):
         print("PROBLEM: ", problem)
         print("seed: ", seed)
-        r2_train, r2_test = eval(
+        r2_train, r2_test, best_model_str = eval(
             problem=problem, cfgfile=cfgfile, seed=seed, grid_search=args.gs
         )
         r2_tests.append(r2_test)
@@ -490,6 +496,7 @@ if __name__ == "__main__":
             "r2_train": r2_train,
             "r2_test": r2_test,
             "seed": seed,
+            "best_model": best_model_str,
         }
 
         with open(f"./results/{problem}.csv", "a") as f:
