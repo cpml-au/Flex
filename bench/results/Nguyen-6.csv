@@ -1,11 +1,11 @@
-problem;trial;r2_train;r2_test;seed
-Nguyen-6;1;1.0;1.0;29802
-Nguyen-6;2;1.0;1.0;22118
-Nguyen-6;3;1.0;1.0;860
-Nguyen-6;4;1.0;1.0;15795
-Nguyen-6;5;1.0;1.0;21575
-Nguyen-6;6;1.0;1.0;5390
-Nguyen-6;7;1.0;1.0;11964
-Nguyen-6;8;1.0;1.0;6265
-Nguyen-6;9;1.0;1.0;23654
-Nguyen-6;10;1.0;1.0;11284
+problem;trial;r2_train;r2_test;seed;best_model
+Nguyen-6;1;1.0;1.0;29802;sin(x) + sin(x*(x + 1))
+Nguyen-6;2;1.0;1.0;22118;sin(x) + sin(x*(x + 1))
+Nguyen-6;3;1.0;1.0;860;sin(x) + sin(x*(x + 1))
+Nguyen-6;4;1.0;1.0;15795;sin(x) + sin(x*(x + 1))
+Nguyen-6;5;1.0;1.0;21575;sin(x) + sin(x*(x + 1))
+Nguyen-6;6;1.0;1.0;5390;sin(x) + sin(x*(x + 1))
+Nguyen-6;7;1.0;1.0;11964;sin(x) + sin(x*(x + 1))
+Nguyen-6;8;1.0;1.0;6265;sin(x) + sin(x*(x + 1))
+Nguyen-6;9;1.0;1.0;23654;sin(x) + sin(x*(x + 1))
+Nguyen-6;10;1.0;1.0;11284;sin(x) + sin(x*(x + 1))

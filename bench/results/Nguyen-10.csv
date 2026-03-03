@@ -1,11 +1,11 @@
-problem;trial;r2_train;r2_test;seed
-Nguyen-10;1;1.0;1.0;29802
-Nguyen-10;2;1.0;1.0;22118
-Nguyen-10;3;1.0;1.0;860
-Nguyen-10;4;1.0;1.0;15795
-Nguyen-10;5;1.0;1.0;21575
-Nguyen-10;6;1.0;1.0;5390
-Nguyen-10;7;1.0;1.0;11964
-Nguyen-10;8;1.0;1.0;6265
-Nguyen-10;9;1.0;1.0;23654
-Nguyen-10;10;1.0;1.0;11284
+problem;trial;r2_train;r2_test;seed;best_model
+Nguyen-10;1;1.0;1.0;29802;2*sin(x)*cos(y)
+Nguyen-10;2;1.0;1.0;22118;2*sin(x)*cos(y)
+Nguyen-10;3;1.0;1.0;860;2*sin(x)*cos(y)
+Nguyen-10;4;1.0;1.0;15795;log(exp(sin(x)*cos(y))) + sin(x)*cos(y)
+Nguyen-10;5;1.0;1.0;21575;2*sin(x)*cos(y)
+Nguyen-10;6;1.0;1.0;5390;2*sin(x)*cos(y)
+Nguyen-10;7;1.0;1.0;11964;2*sin(x)*cos(y)
+Nguyen-10;8;1.0;1.0;6265;2*sin(x)*cos(y)
+Nguyen-10;9;1.0;1.0;23654;2*sin(x)*cos(y)
+Nguyen-10;10;1.0;1.0;11284;2*sin(x)*cos(y)

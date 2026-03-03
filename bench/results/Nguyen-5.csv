@@ -1,11 +1,11 @@
-problem;trial;r2_train;r2_test;seed
-Nguyen-5;1;1.0;1.0;29802
-Nguyen-5;2;1.0;1.0;22118
-Nguyen-5;3;1.0;1.0;860
-Nguyen-5;4;0.9963717989948421;-3.4583773094670507;15795
-Nguyen-5;5;1.0;1.0;21575
-Nguyen-5;6;1.0;1.0;5390
-Nguyen-5;7;1.0;1.0;11964
-Nguyen-5;8;1.0;1.0;6265
-Nguyen-5;9;1.0;1.0;23654
-Nguyen-5;10;1.0;1.0;11284
+problem;trial;r2_train;r2_test;seed;best_model
+Nguyen-5;1;1.0;1.0;29802;sin(x**2)*cos(x) - 1
+Nguyen-5;2;1.0;1.0;22118;sin(x**2)*cos(x) - 1
+Nguyen-5;3;1.0;1.0;860;sin(x**2)*cos(x) - 1
+Nguyen-5;4;1.0;1.0;15795;sin(x**2)*cos(x) - 1
+Nguyen-5;5;1.0;1.0;21575;sin(x**2)*cos(x) - 1
+Nguyen-5;6;1.0;1.0;5390;sin(x**2)*cos(x) - 1
+Nguyen-5;7;1.0;1.0;11964;sin(x**2)*cos(x) - 1
+Nguyen-5;8;1.0;1.0;6265;sin(x**2)*cos(x) - 1
+Nguyen-5;9;1.0;1.0;23654;sin(x**2)*cos(x) - 1
+Nguyen-5;10;1.0;1.0;11284;sin(x**2)*cos(x) - 1
