@@ -149,7 +149,6 @@ def eval_MSE_and_tune_constants(tree, toolbox, X, y):
         class fitting_problem:
             def fitness(self, x):
                 total_err = eval_MSE(consts=x)
-                # return [total_err + 0.*(np.linalg.norm(x, 2))**2]
                 return [total_err]
 
             def gradient(self, x):
@@ -164,10 +163,10 @@ def eval_MSE_and_tune_constants(tree, toolbox, X, y):
 
         # PYGMO SOLVER
         prb = pg.problem(fitting_problem())
-        algo = pg.algorithm(pg.nlopt(solver="lbfgs"))
-        # algo = pg.algorithm(pg.pso(gen=10))
-        # pop = pg.population(prb, size=70)
-        algo.extract(pg.nlopt).maxeval = 10
+        # algo = pg.algorithm(pg.nlopt(solver="lbfgs"))
+        algo = pg.algorithm(pg.pso(gen=10))
+        pop = pg.population(prb, size=70)
+        # algo.extract(pg.nlopt).maxeval = 10
         pop = pg.population(prb, size=1)
         pop.push_back(x0)
         pop = algo.evolve(pop)
@@ -348,7 +347,7 @@ def eval(problem, cfgfile, seed=42, grid_search=False):
         seed_str=None,
         batch_size=batch_size,
         num_cpus=num_cpus,
-        remove_init_duplicates=False,
+        remove_init_duplicates=True,
         save_detailed_log=False,
         early_stop_fitness_threshold=1e-12,
         **regressor_params,

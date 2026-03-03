@@ -65,6 +65,15 @@ def load_config_data(filename):
 
     regressor_params["validate"] = config_file_data["gp"]["validate"]
 
+    # Optional regressor settings
+    optional_keys = [
+        "variation_mechanism",
+        "early_stop_fitness_threshold",
+    ]
+    for key in optional_keys:
+        if key in config_file_data["gp"]:
+            regressor_params[key] = config_file_data["gp"][key]
+
     return regressor_params, config_file_data
 
 

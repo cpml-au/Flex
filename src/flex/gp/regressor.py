@@ -76,6 +76,8 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         mig_frac: fraction of individuals exchanged during migration.
         crossover_prob: probability of applying crossover.
         mut_prob: probability of applying mutation.
+        variation_mechanism: variation operator used to generate offspring.
+            Supported values are ``"varAnd"`` and ``"varOr"``.
         frac_elitist: fraction of elite individuals preserved each generation.
         overlapping_generation: True if the offspring competes with the parents
             for survival.
@@ -136,6 +138,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         mig_frac: float = 0.05,
         crossover_prob: float = 0.5,
         mut_prob: float = 0.2,
+        variation_mechanism: str = "varAnd",
         frac_elitist: float = 0.0,
         overlapping_generation: bool = False,
         common_data: Dict | None = None,
@@ -183,6 +186,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         self.num_islands = num_islands
         self.crossover_prob = crossover_prob
         self.mut_prob = mut_prob
+        self.variation_mechanism = variation_mechanism.lower()
         self.select_fun = select_fun
         self.select_args = select_args
         self.mut_fun = mut_fun
@@ -208,6 +212,12 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         self.max_calls = max_calls
         self.custom_logger = custom_logger
         self.multiprocessing = multiprocessing
+
+        if self.variation_mechanism not in ("varand", "varor"):
+            raise ValueError(
+                "variation_mechanism must be either 'varAnd' or 'varOr'. "
+                f"Got: {variation_mechanism}"
+            )
 
     def __sklearn_tags__(self):
         # since we are allowing cases in which y=None
@@ -694,12 +704,22 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
 
             # Apply crossover and mutation to the offspring with elitism
             elite_inds[i] = tools.selBest(offsprings[i], self.n_elitist)
-            offsprings[i] = elite_inds[i] + algorithms.varAnd(
-                offsprings[i][: self.num_individuals - self.n_elitist],
-                toolbox,
-                self.crossover_prob,
-                self.mut_prob,
-            )
+            if self.variation_mechanism == "varand":
+                varied_offspring = algorithms.varAnd(
+                    offsprings[i][: self.num_individuals - self.n_elitist],
+                    toolbox,
+                    self.crossover_prob,
+                    self.mut_prob,
+                )
+            else:
+                varied_offspring = algorithms.varOr(
+                    offsprings[i],
+                    toolbox,
+                    self.num_individuals - self.n_elitist,
+                    self.crossover_prob,
+                    self.mut_prob,
+                )
+            offsprings[i] = elite_inds[i] + varied_offspring
 
             # add individuals subject to cross-over and mutation to the list of invalids
             invalid_inds[i] = [ind for ind in offsprings[i] if not ind.fitness.valid]
@@ -855,12 +875,15 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             save_best_inds: whether to keep the best individual from each island
                 in the new population. Defaults to True.
         """
-        best_inds = [None] * self.num_islands
-        for i in range(self.num_islands):
-            best_inds[i] = tools.selBest(self.__pop[i], k=1)[0]
+        best_inds = None
+        if save_best_inds:
+            best_inds = [None] * self.num_islands
+            for i in range(self.num_islands):
+                best_inds[i] = tools.selBest(self.__pop[i], k=1)[0]
         self._generate_init_pop(toolbox)
-        for i in range(self.num_islands):
-            self.__pop[i][0] = best_inds[i]
+        if save_best_inds and best_inds is not None:
+            for i in range(self.num_islands):
+                self.__pop[i][0] = best_inds[i]
 
     def _generate_init_pop(self, toolbox: base.Toolbox):
         """Generates the initial population.
@@ -936,6 +959,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             self.__cgen = gen + 1
 
             self._step(toolbox, self.__cgen)
+
             if (
                 self.early_stop_fitness_threshold is not None
                 and self._best.fitness.valid

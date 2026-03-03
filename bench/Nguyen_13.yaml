@@ -32,7 +32,7 @@ gp:
   tarpeian_length_threshold: 40
   final_model_selection: mse
   batch_size: 200
-  use_constants: False
+  use_constants: True
   remove_init_duplicates: False
   primitives:
     imports:
