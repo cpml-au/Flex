@@ -28,8 +28,6 @@ from functools import partial
 import optuna
 import sympy as sp
 
-num_cpus = 1
-
 
 def check_trig_fn(ind):
     return len(re.findall("cos", str(ind))) + len(re.findall("sin", str(ind)))
@@ -63,12 +61,6 @@ def compute_MSE(individual, X, y, consts=[]):
 def sanitize_array_for_metrics(arr, name, clip_value=1e150):
     """Return a finite float64 array suitable for metric computation."""
     arr = np.asarray(arr, dtype=np.float64).reshape(-1)
-    non_finite_mask = ~np.isfinite(arr)
-    if np.any(non_finite_mask):
-        print(
-            f"Warning: {name} contains {int(np.sum(non_finite_mask))} non-finite values. "
-            "Replacing/clipping before metric computation."
-        )
     arr = np.nan_to_num(arr, nan=0.0, posinf=clip_value, neginf=-clip_value)
     arr = np.clip(arr, -clip_value, clip_value)
     return arr
@@ -349,7 +341,6 @@ def eval(problem, cfgfile, seed=42, grid_search=False):
         output_path="./",
         seed_str=None,
         batch_size=batch_size,
-        num_cpus=num_cpus,
         remove_init_duplicates=True,
         save_detailed_log=False,
         early_stop_fitness_threshold=1e-12,
@@ -399,8 +390,16 @@ def eval(problem, cfgfile, seed=42, grid_search=False):
     else:
         best_model = best_estimator.get_best_individuals(n_ind=1)[0]
 
-    best_model_sympy = sp.simplify(best_estimator.get_best_individual_sympy())
-    best_model_str = str(best_model_sympy)
+    try:
+        best_model_sympy = sp.simplify(best_estimator.get_best_individual_sympy())
+        best_model_str = str(best_model_sympy)
+    except Exception as exc:
+        print(
+            "Warning: failed to convert best model to SymPy "
+            f"({type(exc).__name__}: {exc}). "
+            "Using raw GP string instead."
+        )
+        best_model_str = str(best_model)
     print("Best selected model = ", best_model_str)
 
     if hasattr(best_model, "consts"):
@@ -474,8 +473,7 @@ if __name__ == "__main__":
 
     r2_tests = []
 
-    # possibly add rmse_train, rmse_test, rmse_val
-    header = ["problem", "trial", "r2_train", "r2_test", "seed"]
+    header = ["problem", "trial", "r2_train", "r2_test", "seed", "best_model"]
 
     with open(f"./results/{problem}.csv", "w") as f:
         for h in header:

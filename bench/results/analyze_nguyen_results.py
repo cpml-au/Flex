@@ -28,7 +28,7 @@ def main():
         "--results-dir",
         type=Path,
         default=Path(__file__).resolve().parent,
-        help="Directory containing Nguyen-*.csv files (default: current script folder).",
+        help="Directory containing Nguyen-*.csv files (default: current folder).",
     )
     parser.add_argument(
         "--output-csv",
