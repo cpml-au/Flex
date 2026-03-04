@@ -25,7 +25,6 @@ gp:
     expr_mut: gp.genHalfAndHalf
     expr_mut_kargs: "{'min_': 1, 'max_': 2}"
   crossover:
-    # fun: operators.cxOnePointSameDepth
     fun: gp.cxOnePoint
     kargs: "{}"
   scaleXy: False
@@ -44,12 +43,8 @@ gp:
         { "name": "sub", "dimension": null, "rank": null },
         { "name": "mul", "dimension": null, "rank": null },
         { "name": "div", "dimension": null, "rank": null },
-        # { "name": "aq", "dimension": null, "rank": null },
-        # { "name": "square", "dimension": null, "rank": null },
         { "name": "sin", "dimension": null, "rank": null },
-        # { "name": "arcsin", "dimension": null, "rank": null },
         { "name": "cos", "dimension": null, "rank": null },
-        # { "name": "arccos", "dimension": null, "rank": null },
         { "name": "exp", "dimension": null, "rank": null },
         { "name": "log", "dimension": null, "rank": null },
       ]

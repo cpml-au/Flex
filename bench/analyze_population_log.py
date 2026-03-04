@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+"""Analyze GP population diversity from detailed evolution logs."""
+
 import argparse
 import csv
 import math
@@ -10,10 +12,11 @@ from statistics import mean, pstdev
 import matplotlib.pyplot as plt
 
 TOKEN_RE = re.compile(r"[A-Za-z_]\w*")
+NAN = float("nan")
 
 
 def _safe_mean(values):
-    return mean(values) if values else float("nan")
+    return mean(values) if values else NAN
 
 
 def _safe_std(values):
@@ -31,21 +34,8 @@ def _entropy_from_counts(counts):
     return entropy
 
 
-def _simpson_diversity(counts):
-    total = sum(counts.values())
-    if total <= 0:
-        return 0.0
-    sq_sum = 0.0
-    for c in counts.values():
-        p = c / total
-        sq_sum += p * p
-    return 1.0 - sq_sum
-
-
 def _token_stats(exprs):
-    all_tokens = []
-    for expr in exprs:
-        all_tokens.extend(TOKEN_RE.findall(expr))
+    all_tokens = [token for expr in exprs for token in TOKEN_RE.findall(expr)]
     total = len(all_tokens)
     unique = len(set(all_tokens))
     richness = (unique / total) if total > 0 else 0.0
@@ -68,19 +58,48 @@ def _group_metrics(rows):
         "unique_exprs": unique_exprs,
         "unique_expr_ratio": (unique_exprs / n) if n > 0 else 0.0,
         "expr_entropy": _entropy_from_counts(expr_counts),
-        "simpson_diversity": _simpson_diversity(expr_counts),
         "length_mean": _safe_mean(lengths),
         "length_std": _safe_std(lengths),
         "unique_lengths": len(set(lengths)),
         "unique_length_ratio": (len(set(lengths)) / n) if n > 0 else 0.0,
         "fitness_mean": _safe_mean(fitnesses),
         "fitness_std": _safe_std(fitnesses),
-        "fitness_min": min(fitnesses) if fitnesses else float("nan"),
-        "fitness_max": max(fitnesses) if fitnesses else float("nan"),
+        "fitness_min": min(fitnesses) if fitnesses else NAN,
+        "fitness_max": max(fitnesses) if fitnesses else NAN,
         "unique_tokens": unique_tokens,
         "total_tokens": total_tokens,
         "token_richness": token_richness,
     }
+
+
+def _add_normalized_best_fitness(island_rows):
+    by_island = defaultdict(list)
+    for row in island_rows:
+        by_island[row["island"]].append(row)
+
+    for rows in by_island.values():
+        best_vals = [r["fitness_min"] for r in rows if math.isfinite(r["fitness_min"])]
+        if not best_vals:
+            for r in rows:
+                r["fitness_best_norm"] = NAN
+            continue
+
+        # Lower fitness is better; normalize so 1.0 is the best seen for that island.
+        island_min = min(best_vals)
+        island_max = max(best_vals)
+        denom = island_max - island_min
+        if denom <= 0.0:
+            for r in rows:
+                r["fitness_best_norm"] = (
+                    1.0 if math.isfinite(r["fitness_min"]) else NAN
+                )
+            continue
+
+        for r in rows:
+            if math.isfinite(r["fitness_min"]):
+                r["fitness_best_norm"] = (island_max - r["fitness_min"]) / denom
+            else:
+                r["fitness_best_norm"] = NAN
 
 
 def _read_log(path):
@@ -109,8 +128,8 @@ def _read_log(path):
             length = int(row["length"])
             try:
                 fitness = float(row["fitness"])
-            except ValueError:
-                fitness = float("nan")
+            except (TypeError, ValueError):
+                fitness = NAN
             expr = row["expr"]
 
             parsed = {
@@ -136,32 +155,6 @@ def _write_csv(path, rows):
         writer.writerows(rows)
 
 
-def _plot_generation_metrics(gen_rows, output_prefix):
-    generations = [r["generation"] for r in gen_rows]
-    metrics = [
-        ("unique_expr_ratio", "Unique Expr Ratio"),
-        ("expr_entropy", "Expression Entropy"),
-        ("simpson_diversity", "Simpson Diversity"),
-        ("unique_length_ratio", "Unique Length Ratio"),
-        ("length_std", "Length Std"),
-        ("fitness_std", "Fitness Std"),
-    ]
-
-    fig, axes = plt.subplots(2, 3, figsize=(15, 8), sharex=True)
-    for ax, (key, title) in zip(axes.flatten(), metrics):
-        values = [r[key] for r in gen_rows]
-        ax.plot(generations, values, linewidth=1.8)
-        ax.set_title(title)
-        ax.grid(alpha=0.25)
-        ax.set_xlabel("Generation")
-    fig.suptitle("Population Diversity Trends (All Islands Aggregated)")
-    fig.tight_layout()
-    out = Path(str(output_prefix) + "_plots_generation_metrics.png")
-    fig.savefig(out, dpi=180)
-    plt.close(fig)
-    return [out]
-
-
 def _plot_island_trajectories(island_rows, output_prefix):
     by_island = defaultdict(list)
     for row in island_rows:
@@ -172,7 +165,7 @@ def _plot_island_trajectories(island_rows, output_prefix):
     metrics = [
         ("unique_expr_ratio", "Unique Expr Ratio"),
         ("expr_entropy", "Expression Entropy"),
-        ("simpson_diversity", "Simpson Diversity"),
+        ("fitness_best_norm", "Normalized Best Fitness"),
         ("fitness_std", "Fitness Std"),
     ]
 
@@ -190,30 +183,6 @@ def _plot_island_trajectories(island_rows, output_prefix):
     fig.suptitle("Per-Island Diversity Trajectories")
     fig.tight_layout(rect=(0, 0, 1, 0.95))
     out = Path(str(output_prefix) + "_plots_islands_combined.png")
-    fig.savefig(out, dpi=180)
-    plt.close(fig)
-    return [out]
-
-
-def _plot_island_divergence(island_rows, output_prefix):
-    by_gen_metric = defaultdict(list)
-    for row in island_rows:
-        by_gen_metric[row["generation"]].append(row["unique_expr_ratio"])
-
-    generations = sorted(by_gen_metric.keys())
-    spread = []
-    for gen in generations:
-        vals = by_gen_metric[gen]
-        spread.append(max(vals) - min(vals) if vals else 0.0)
-
-    fig, ax = plt.subplots(figsize=(9, 4.5))
-    ax.plot(generations, spread, linewidth=1.8)
-    ax.set_title("Between-Island Divergence in Unique Expr Ratio")
-    ax.set_xlabel("Generation")
-    ax.set_ylabel("Max - Min across islands")
-    ax.grid(alpha=0.25)
-    fig.tight_layout()
-    out = Path(str(output_prefix) + "_plots_island_divergence.png")
     fig.savefig(out, dpi=180)
     plt.close(fig)
     return out
@@ -259,11 +228,19 @@ def main():
     for (generation, island), rows in sorted(per_gen_island.items()):
         metrics = _group_metrics(rows)
         island_rows.append({"generation": generation, "island": island, **metrics})
+    _add_normalized_best_fitness(island_rows)
 
     gen_rows = []
     for generation, rows in sorted(per_gen.items()):
         metrics = _group_metrics(rows)
         metrics["num_islands_present"] = len({r["island"] for r in rows})
+        island_norm_vals = [
+            r["fitness_best_norm"]
+            for r in island_rows
+            if r["generation"] == generation and math.isfinite(r["fitness_best_norm"])
+        ]
+        metrics["fitness_best_norm_mean"] = _safe_mean(island_norm_vals)
+        metrics["fitness_best_norm_std"] = _safe_std(island_norm_vals)
         gen_rows.append({"generation": generation, **metrics})
 
     island_out = Path(str(output_prefix) + "_per_island.csv")
@@ -277,9 +254,8 @@ def main():
     if not args.no_plots and island_rows:
         # Only generate one combined figure where all islands are overlaid
         # with different colors (no separate plot files per metric).
-        plots = _plot_island_trajectories(island_rows, output_prefix)
-        for plot_file in plots:
-            print(f"Wrote plot: {plot_file}")
+        plot_file = _plot_island_trajectories(island_rows, output_prefix)
+        print(f"Wrote plot: {plot_file}")
 
     if gen_rows:
         last = gen_rows[-1]
@@ -288,7 +264,7 @@ def main():
             f"gen={last['generation']}, "
             f"unique_expr_ratio={last['unique_expr_ratio']:.4f}, "
             f"expr_entropy={last['expr_entropy']:.4f}, "
-            f"simpson_diversity={last['simpson_diversity']:.4f}"
+            f"fitness_best_norm_mean={last['fitness_best_norm_mean']:.4f}"
         )
 
 
