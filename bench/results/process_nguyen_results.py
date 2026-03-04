@@ -79,7 +79,9 @@ def main():
     )
     summary_df = summary_df.sort_values("dataset_id").drop(columns=["dataset_id"])
 
-    md_df = summary_df[["dataset", "r2_test_mean", "r2_test_median", "success_rate"]].copy()
+    md_df = summary_df[
+        ["dataset", "r2_test_mean", "r2_test_median", "success_rate"]
+    ].copy()
     md_df["r2_test_mean"] = md_df["r2_test_mean"].map(format_float)
     md_df["r2_test_median"] = md_df["r2_test_median"].map(format_float)
     markdown_table = md_df.to_markdown(index=False, disable_numparse=True)
@@ -92,7 +94,13 @@ def main():
             out,
             sep=";",
             index=False,
-            columns=["dataset", "total_runs", "r2_test_mean", "successful_runs", "success_rate"],
+            columns=[
+                "dataset",
+                "total_runs",
+                "r2_test_mean",
+                "successful_runs",
+                "success_rate",
+            ],
         )
         print(f"\nSaved summary to: {out}")
 
