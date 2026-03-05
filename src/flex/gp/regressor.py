@@ -44,7 +44,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
     - Elitism and overlapping or non-overlapping generations
     - Parallel fitness evaluation using Ray
     - Validation-set monitoring
-    - Conversion of the best individual to a SymPy expression
+    - Conversion of the best individuals to a SymPy expression
 
     Args:
         pset_config: set of primitives and terminals (loosely or strongly typed).
@@ -942,25 +942,31 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
                 join(output_path, "val_score_history.npy"), self.__val_score_history
             )
 
-    def get_best_individual_sympy(
+    def get_best_individuals_sympy(
         self,
         sympy_conversion_rules: Dict = conversion_rules,
         special_term_name: str = "c",
+        n_ind: int = 1,
     ):
-        """Returns the SymPy expression of the best individual.
+        """Returns the SymPy expression of the best individuals.
 
         Args:
             sympy_conversion_rules: mapping from GP primitives (DEAP) to SymPy
                 primitives.
             special_term_name: name used for constants during SymPy conversion.
+            n_ind: number of best individuals to convert to SymPy.
 
         Returns:
-            sympy representation of the best individual if conversion is enabled.
+            sympy representation of the best individuals.
         """
-
-        best_sympy = parse_expr(
-            stringify_for_sympy(self._best, sympy_conversion_rules, special_term_name)
-        )
+        best_inds = self.get_best_individuals(n_ind=n_ind)
+        best_sympy = [None] * n_ind
+        for i in range(n_ind):
+            best_sympy[i] = parse_expr(
+                stringify_for_sympy(
+                    best_inds[i], sympy_conversion_rules, special_term_name
+                )
+            )
         return best_sympy
 
     def get_train_fit_history(self):
