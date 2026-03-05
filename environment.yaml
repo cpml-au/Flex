@@ -18,6 +18,8 @@ dependencies:
   - typeguard
   - yaml
   - pygraphviz
+  - petsc
+  - petsc4py
   - pip
   - pip:
       - git+https://github.com/cpml-au/dctkit
