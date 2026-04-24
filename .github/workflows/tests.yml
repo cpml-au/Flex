@@ -1,8 +1,5 @@
 name: Linting and testing
-
-on:
-  - push
-  - pull_request
+on: [push, pull_request]
 
 jobs:
   build:
@@ -10,23 +7,27 @@ jobs:
     strategy:
       matrix:
         python-version: ['3.12']
-
     steps:
     - uses: actions/checkout@v3
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v4
+
+    # Use the dedicated Conda action to handle the solver and shell initialization
+    - name: Set up Miniconda
+      uses: conda-incubator/setup-miniconda@v3
       with:
         python-version: ${{ matrix.python-version }}
+        mamba-version: "*"
+        channels: conda-forge,defaults
+        channel-priority: strict
+        activate-environment: test-env
+
     - name: Install dependencies
       run: |
         sudo apt-get -y install libglu1
-        conda install -n base conda-libmamba-solver
-        conda config --set solver libmamba
-        python -m pip install tox-conda
-        python -m pip install flake8
-        python -m pip install setuptools
+        # Install tox and plugins into the active conda environment
+        python -m pip install tox tox-conda flake8 setuptools
+
     - name: Linting with flake8
-      run: |
-        flake8
+      run: flake8
+
     - name: Running tests with tox
       run: tox
