@@ -18,7 +18,8 @@ dependencies:
   - typeguard
   - yaml
   - pygraphviz
-  # - petsc4py
+  # Required by dctkit.math.opt.optctrl, including when using the pygmo solver.
+  - petsc4py
   - pip
   - pip:
       - git+https://github.com/cpml-au/dctkit
