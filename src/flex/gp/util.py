@@ -114,7 +114,7 @@ def detect_nested_trigonometric_functions(equation):
 
 
 def mapper(f, individuals, toolbox_ref, batch_size):
-    fitnesses = [] * len(individuals)
+    fitnesses = []
     for i in range(0, len(individuals), batch_size):
         individuals_batch = individuals[i : i + batch_size]
         fitnesses.append(f(individuals_batch, toolbox_ref))

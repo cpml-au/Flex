@@ -18,7 +18,8 @@ gp:
     # kargs: "{'tournsize': 2, 'stochastic_tourn': { 'enabled': True, 'prob': [0.7, 0.3] }}"
     fun: tools.selection.selStochasticUniversalSampling
     # fun: random.sample
-    kargs: "{'k': self.num_individuals}"
+    # Convert nonnegative losses to SUS weights; larger weights are preferred.
+    kargs: "{'k': self.num_individuals, 'weight_transform': lambda loss: 1.0 / (1.0 + loss)}"
   mutate:
     fun: gp.mixedMutate
     kargs: "{'expr': toolbox.expr_mut, 'pset': pset, 'prob': [0.7, 0.2, 0.1]}" # string is important

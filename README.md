@@ -35,7 +35,7 @@ solving the environment and downloading the dependencies. To create a suitable
 environment based on the provided `.yaml` file, use the command
 
 ```bash
-$ mamba env create -f environment.yaml
+mamba env create -f environment.yaml
 ```
 
 Otherwise, you can update an existing environment using the same `.yaml` file.
@@ -43,7 +43,7 @@ Otherwise, you can update an existing environment using the same `.yaml` file.
 After activating the environment, clone the git repository and launch the following command
 
 ```bash
-$ pip install -e .
+pip install -e .
 ```
 
 to install a development version of the library.
@@ -51,13 +51,13 @@ to install a development version of the library.
 Running the tests:
 
 ```bash
-$ tox
+tox
 ```
 
 Generating the docs:
 
 ```bash
-$ tox -e docs
+tox -e docs
 ```
 
 ## Benchmarks
@@ -65,7 +65,7 @@ $ tox -e docs
 To run the benchmarks, cd into the `bench` folder and execute:
 
 ```bash
-$ ./bench.sh
+./bench.sh
 ```
 
 Then, process the results using the `process_results` notebook.

@@ -1,0 +1,40 @@
+gp:
+  num_individuals: 80
+  generations: 50
+  multi_island:
+    num_islands: 10
+    migration: { "freq": 4, "frac": 0.05 }
+  crossover_prob: 0.
+  mut_prob: 1.
+  frac_elitist: 0.
+  min_: 2
+  max_: 4
+  overlapping_generation: True
+  validate: False
+  penalty: { "reg_param": 1.e-3 }
+  select:
+    fun: random.sample
+    kargs: "{'k': self.num_individuals}"
+  mutate:
+    fun: gp.mixedMutate
+    kargs: "{'expr': toolbox.expr_mut, 'pset': pset, 'prob': [0.7, 0.2, 0.1]}" # string is important
+    expr_mut: gp.genHalfAndHalf
+    expr_mut_kargs: "{'min_': 1, 'max_': 2}"
+  crossover:
+    fun: gp.cxOnePoint
+    kargs: "{}"
+  scaleXy: True
+  batch_size: 10
+  use_constants: True
+  primitives:
+    imports:
+      {
+        "flex.gp.numpy_primitives": ["numpy_primitives"],
+      }
+    used: [
+        { "name": "add", "dimension": null, "rank": null },
+        { "name": "sub", "dimension": null, "rank": null },
+        { "name": "mul", "dimension": null, "rank": null },
+        { "name": "aq", "dimension": null, "rank": null },
+        { "name": "sin", "dimension": null, "rank": null },
+      ]

@@ -281,7 +281,8 @@ def assign_attributes(individuals_batch, attributes):
         ind.fitness.values = attr["fitness"]
 
 
-def eval(problem, cfgfile, seed=42, grid_search=False):
+def eval(problem, cfgfile, seed=42, grid_search=False, coarse_grained_islands=False,
+         remove_init_duplicates=True, custom_logger=None):
 
     regressor_params, config_file_data = load_config_data(cfgfile)
 
@@ -335,15 +336,17 @@ def eval(problem, cfgfile, seed=42, grid_search=False):
         score_func=compute_MSEs,
         common_data=common_params,
         callback_func=callback_func,
+        custom_logger=custom_logger,
         print_log=True,
         num_best_inds_str=1,
         save_best_individual=False,
         output_path="./",
         seed_str=None,
         batch_size=batch_size,
-        remove_init_duplicates=True,
+        remove_init_duplicates=remove_init_duplicates,
         save_detailed_log=False,
         early_stop_fitness_threshold=1e-12,
+        coarse_grained_islands=coarse_grained_islands,
         **regressor_params,
     )
 
@@ -442,7 +445,7 @@ def eval(problem, cfgfile, seed=42, grid_search=False):
     print("MSE on the training set = ", MSE)
     print("R^2 on the training set = ", r2_train)
 
-    return r2_train, r2_test, best_model_str
+    return r2_train, r2_test, best_model_str, toc - tic
 
 
 if __name__ == "__main__":
@@ -483,7 +486,7 @@ if __name__ == "__main__":
     for i, seed in enumerate(seeds):
         print("PROBLEM: ", problem)
         print("seed: ", seed)
-        r2_train, r2_test, best_model_str = eval(
+        r2_train, r2_test, best_model_str, _ = eval(
             problem=problem, cfgfile=cfgfile, seed=seed, grid_search=args.gs
         )
         r2_tests.append(r2_test)
