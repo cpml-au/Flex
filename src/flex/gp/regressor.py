@@ -8,6 +8,7 @@ from os.path import join
 import os
 import ray
 import random
+from numbers import Integral
 from flex.gp.util import mapper, max_func, min_func, avg_func, std_func, fitness_value
 from flex.gp.sympy import stringify_for_sympy
 from flex.gp.numpy_primitives import conversion_rules
@@ -292,7 +293,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         num_islands: number of islands (for a multi-island model).
         remove_init_duplicates: whether to remove duplicate individuals from
             the initial populations.
-        mig_freq: migration frequency (in generations).
+        mig_freq: migration frequency (a positive integer number of generations).
         mig_frac: fraction of individuals exchanged during migration.
         crossover_prob: probability of applying crossover.
         mut_prob: probability of applying mutation.
@@ -772,6 +773,13 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             a configured DEAP toolbox containing registered evaluation and
             preprocessing functions.
         """
+        if (
+            isinstance(self.mig_freq, bool)
+            or not isinstance(self.mig_freq, Integral)
+            or self.mig_freq <= 0
+        ):
+            raise ValueError("mig_freq must be a positive integer.")
+
         validated_data = validate_data(
             self,
             X,
@@ -1121,7 +1129,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             self.__cgen = gen
 
             # migration among islands
-            if self.num_islands > 1:
+            if self.num_islands > 1 and gen % self.mig_freq == 0:
                 migRing(
                     self.__pop,
                     int(self.mig_frac * self.num_individuals),
