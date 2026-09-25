@@ -310,47 +310,57 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
           execute. It must accept an individual and the toolbox as its first two
           arguments; `func_args`: a dictionary of additional arguments for
           func; `callback`: a function used to assign the resulting preprocessed
-          values back to each individual.
+          values back to each individual. Not supported when hybrid island
+          evolution is active; use ``coarse_grained_islands=False`` instead.
         callback_func: function called after fitness evaluation to perform custom
             processing.
         seed_str: list of GP expressions used to seed the initial population.
         print_log: whether to print the log containing the population statistics
             during the run.
-        num_best_inds_str: number of best individuals printed at each generation.
+        num_best_inds_str: number of best individuals printed at each reporting point.
         save_best_individual: whether to save the string representation of the best
             individual.
         save_train_fit_history: whether to save the training fitness history.
-        save_detailed_log: whether to save a per-generation population log with
-            each individual string, size, fitness, and island index.
+        save_detailed_log: whether to save population snapshots with each
+            individual string, size, fitness, and island index. Includes the initial
+            population; hybrid evolution records subsequent snapshots at block
+            boundaries rather than every generation.
         detailed_log_filename: file name used for detailed population logging.
         early_stop_fitness_threshold: if set, stop evolution early when the best
-            training fitness is less than or equal to this threshold.
+            training fitness is less than or equal to this threshold. Checked after
+            each generation in fine mode, or after each block in hybrid mode.
         output_path: directory where outputs are saved.
-        batch_size : batch size used for Ray-based fitness evaluation.
-        num_cpus: number of CPUs allocated to each Ray task.
-        max_calls: maximum number of tasks a Ray worker can execute before restart.
-            The default is `0`, which means infinite number of tasks.
+        batch_size: maximum number of individuals sent to each Ray fitness task.
+            Smaller batches allow finer load balancing but create more tasks.
+        num_cpus: CPUs requested per Ray fitness task, not the total CPU limit
+            for the run. Hybrid island coordinators request zero CPUs so they
+            do not reserve resources needed by their fitness tasks.
+        max_calls: maximum calls to a Ray remote function per worker before that
+            worker exits. The default is ``0``, meaning unlimited calls.
         custom_logger: user-defined logging function called with the best individuals.
-        multiprocessing: whether to use Ray for parallel fitness evaluation.
+        multiprocessing: whether to use Ray for parallel fitness evaluation
+            (default ``True``). If ``False``, evolution and fitness evaluation run
+            locally and hybrid island execution is disabled.
         coarse_grained_islands: selects the island-parallel strategy (only takes
             effect when ``multiprocessing`` is enabled with more than one island).
-            Accepts:
+            Pass this option directly to the constructor; ``load_config_data``
+            does not forward it from YAML. Accepts:
 
             - ``False`` / ``"fine"`` (default): master-worker. Variation runs on the
               driver; the fitness of all islands' individuals is pooled into one
-              globally load-balanced Ray queue across all cores. Best default, and
-              best when fitness is expensive and load-imbalanced (e.g. per-individual
-              constant tuning).
+              globally load-balanced Ray queue. Statistics, validation and early
+              stopping checks occur after each generation.
             - ``True`` / ``"hybrid"``: each island runs as a lightweight coordinator
               that evolves it for ``mig_freq`` generations at a time (variation and
               the generational loop run on the coordinator), fanning each generation's
               fitness batch out across the whole cluster. This removes the
               per-generation global barrier and parallelizes variation while still
-              using every core for fitness. Population statistics are recorded every
-              ``mig_freq`` generations rather than every generation. Pays off only
-              when fitness is expensive and the per-generation barrier / driver-side
-              variation is a real cost; otherwise its nested-task overhead loses to
-              the fine-grained default.
+              sharing the cluster's fitness workers. Statistics, validation,
+              logging and early stopping checks occur after each block, including
+              a final partial block. Migration occurs only at multiples of
+              ``mig_freq``. This mode does not support ``preprocess_args``.
+              It can help when generation synchronization or driver-side variation
+              is costly, but adds overhead from nested Ray tasks.
     """
 
     def __init__(
