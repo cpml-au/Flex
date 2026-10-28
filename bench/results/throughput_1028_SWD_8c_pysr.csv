@@ -1,0 +1,6 @@
+method;seed;time_s;evals_per_s;raw_evals_per_s
+pysr;29802;63.04;5.99e+05;nan
+pysr;22118;62.89;5.97e+05;nan
+pysr;860;62.62;6.45e+05;nan
+pysr;15795;62.69;6.2e+05;nan
+pysr;21575;62.60;7.02e+05;nan

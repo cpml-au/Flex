@@ -3,7 +3,6 @@ from deap import gp, base
 
 from flex.gp import regressor as gps
 from flex.gp.util import (
-    detect_nested_trigonometric_functions,
     load_config_data,
     compile_individual_with_consts,
 )
@@ -11,30 +10,50 @@ from flex.gp.primitives import add_primitives_to_pset_from_dict
 import numpy as np
 import ray
 
+import math
 import time
 
 import warnings
 import pygmo as pg
 
-import re
 from sklearn.metrics import r2_score
 from datasets import generate_dataset
-
-import mygrad as mg
-from mygrad._utils.lock_management import mem_guard_off
-
-from functools import partial
 
 import optuna
 import sympy as sp
 
+# silence numpy warnings (overflow, invalid values) of the evaluated models once,
+# instead of at each model evaluation
+warnings.filterwarnings("ignore")
 
-def check_trig_fn(ind):
-    return len(re.findall("cos", str(ind))) + len(re.findall("sin", str(ind)))
+
+def trig_features(ind):
+    """Returns 1 if a sin/cos node (including arcsin/arccos) has another one in its
+    subtree (0 otherwise), and the number of sin/cos nodes."""
+    is_trig = [
+        isinstance(node, gp.Primitive) and ("sin" in node.name or "cos" in node.name)
+        for node in ind
+    ]
+    nested = any(
+        is_trig[i] and any(is_trig[i + 1 : ind.searchSubtree(i).stop])
+        for i in range(len(ind))
+    )
+    return int(nested), sum(is_trig)
 
 
-def check_nested_trig_fn(ind):
-    return detect_nested_trigonometric_functions(str(ind))
+# constant optimizers, built once per process and reused for all the individuals
+CONST_OPTIMIZERS = {}
+
+
+def get_const_optimizer(const_optimizer):
+    if const_optimizer not in CONST_OPTIMIZERS:
+        if const_optimizer == "lbfgs":
+            algo = pg.algorithm(pg.nlopt(solver="lbfgs"))
+            algo.extract(pg.nlopt).maxeval = 8
+        else:
+            algo = pg.algorithm(pg.pso(gen=10))
+        CONST_OPTIMIZERS[const_optimizer] = algo
+    return CONST_OPTIMIZERS[const_optimizer]
 
 
 def eval_model(individual, X, consts=[]):
@@ -43,18 +62,29 @@ def eval_model(individual, X, consts=[]):
         X = [X[:, i] for i in range(num_variables)]
     else:
         X = [X]
-    warnings.filterwarnings("ignore")
     y_pred = individual(*X, consts)
     return y_pred
 
 
 def compute_MSE(individual, X, y, consts=[]):
     y_pred = eval_model(individual, X, consts)
-    MSE = np.mean((y - y_pred) ** 2)
+    # flattened: y_pred is (n, 1) for one feature, (n,) for more, scalar for no feature
+    res = y.ravel() - np.ravel(y_pred)
+    MSE = np.sum(res * res) / res.size
 
     if np.isnan(MSE) or np.isinf(MSE):
         MSE = 1e8
 
+    return MSE
+
+
+def compute_MSE_batch(individual, X_cols, y_col, consts):
+    """MSE of the model for each column of ``consts`` (shape: number of constants x
+    number of constant vectors), computed with a single vectorized evaluation.
+    ``X_cols`` (features) and ``y_col`` (labels) are columns of shape (samples, 1)."""
+    res = y_col - individual(*X_cols, consts)
+    MSE = np.sum(res * res, axis=0) / res.shape[0]
+    MSE[~np.isfinite(MSE)] = 1e8
     return MSE
 
 
@@ -130,36 +160,41 @@ def select_best_model_by_bic(estimator, pset, X, y):
     return best, best_bic
 
 
-def eval_MSE_and_tune_constants(tree, toolbox, X, y):
+def eval_MSE_and_tune_constants(tree, toolbox, X, y, const_optimizer="pso"):
     individual, num_consts = compile_individual_with_consts(tree, toolbox)
 
     if num_consts > 0:
 
-        eval_MSE = partial(compute_MSE, individual=individual, X=X, y=y)
+        # features and labels as columns, shared by all the evaluations below
+        X_cols = [X[:, i : i + 1] for i in range(X.shape[1])]
+        y_col = y.reshape(-1, 1)
+        num_samples = y_col.shape[0]
 
         x0 = np.ones(num_consts)
 
         class fitting_problem:
             def fitness(self, x):
-                total_err = eval_MSE(consts=x)
-                return [total_err]
+                res = y_col - individual(*X_cols, x)
+                MSE = np.vdot(res, res) / num_samples
+                return [MSE if math.isfinite(MSE) else 1e8]
 
             def gradient(self, x):
-                with mem_guard_off:
-                    xt = mg.tensor(x, copy=False)
-                    f = self.fitness(xt)[0]
-                    f.backward()
-                return xt.grad
+                # central finite differences, with all the perturbed constant vectors
+                # evaluated in a single call
+                h = 1e-8 * np.maximum(np.abs(x), 1.0)
+                idx = np.arange(num_consts)
+                C = np.repeat(x[:, None], 2 * num_consts, axis=1)
+                C[idx, idx] += h
+                C[idx, num_consts + idx] -= h
+                f = compute_MSE_batch(individual, X_cols, y_col, C)
+                return (f[:num_consts] - f[num_consts:]) / (2 * h)
 
             def get_bounds(self):
                 return (-5.0 * np.ones(num_consts), 5.0 * np.ones(num_consts))
 
         # PYGMO SOLVER
         prb = pg.problem(fitting_problem())
-        # algo = pg.algorithm(pg.nlopt(solver="lbfgs"))
-        algo = pg.algorithm(pg.pso(gen=10))
-        pop = pg.population(prb, size=70)
-        # algo.extract(pg.nlopt).maxeval = 10
+        algo = get_const_optimizer(const_optimizer)
         pop = pg.population(prb, size=1)
         pop.push_back(x0)
         pop = algo.evolve(pop)
@@ -168,23 +203,21 @@ def eval_MSE_and_tune_constants(tree, toolbox, X, y):
 
         if np.isinf(MSE) or np.isnan(MSE):
             MSE = 1e8
+
+        # pygmo counts the fitness calls made through the problem (population init
+        # and optimizer); each gradient evaluates the model at 2 points per constant
+        num_evals = pop.problem.get_fevals()
+        num_raw_evals = num_evals + 2 * num_consts * pop.problem.get_gevals()
     else:
         MSE = compute_MSE(individual, X, y)
         consts = []
-    return MSE, consts
+        num_evals = num_raw_evals = 1
+    return MSE, consts, num_evals, num_raw_evals
 
 
-def get_features_batch(
-    individuals_batch,
-    individ_feature_extractors=[len, check_nested_trig_fn, check_trig_fn],
-):
-    features_batch = [
-        [fe(i) for i in individuals_batch] for fe in individ_feature_extractors
-    ]
-
-    individ_length = features_batch[0]
-    nested_trigs = features_batch[1]
-    num_trigs = features_batch[2]
+def get_features_batch(individuals_batch):
+    individ_length = [len(ind) for ind in individuals_batch]
+    nested_trigs, num_trigs = zip(*[trig_features(ind) for ind in individuals_batch])
     return individ_length, nested_trigs, num_trigs
 
 
@@ -195,6 +228,7 @@ def predict(
     penalty,
     fitness_scale,
     tarpeian_length_threshold,
+    const_optimizer,
 ):
 
     predictions = [None] * len(individuals_batch)
@@ -214,6 +248,7 @@ def compute_MSEs(
     penalty,
     fitness_scale,
     tarpeian_length_threshold,
+    const_optimizer,
 ):
 
     total_errs = [None] * len(individuals_batch)
@@ -233,6 +268,7 @@ def compute_attributes(
     penalty,
     fitness_scale,
     tarpeian_length_threshold,
+    const_optimizer,
 ):
 
     attributes = [None] * len(individuals_batch)
@@ -245,8 +281,11 @@ def compute_attributes(
         if individ_length[i] >= tarpeian_length_threshold:
             consts = None
             fitness = (1e8,)
+            num_evals = num_raw_evals = 0
         else:
-            MSE, consts = eval_MSE_and_tune_constants(tree, toolbox, X, y)
+            MSE, consts, num_evals, num_raw_evals = eval_MSE_and_tune_constants(
+                tree, toolbox, X, y, const_optimizer
+            )
             if MSE < 1e-12:
                 # Keep fitness equal to pure error so early stopping can trigger.
                 fitness = (fitness_scale * MSE,)
@@ -271,18 +310,33 @@ def compute_attributes(
                         + 0.0 * num_trigs[i]
                     ),
                 )
-        attributes[i] = {"consts": consts, "fitness": fitness}
+        attributes[i] = {
+            "consts": consts,
+            "fitness": fitness,
+            "num_evals": num_evals,
+            "num_raw_evals": num_raw_evals,
+        }
     return attributes
+
+
+# Expression evaluations in the current run, accumulated on the driver (the callback
+# runs there). "evals" follows the convention of SymbolicRegression.jl (PySR): one per
+# candidate plus the objective calls of the constant optimizer, without the calls made
+# to estimate gradients by finite differences; "raw_evals" includes them.
+EVAL_COUNTS = {"evals": 0, "raw_evals": 0}
 
 
 def assign_attributes(individuals_batch, attributes):
     for ind, attr in zip(individuals_batch, attributes):
         ind.consts = attr["consts"]
         ind.fitness.values = attr["fitness"]
+        EVAL_COUNTS["evals"] += attr["num_evals"]
+        EVAL_COUNTS["raw_evals"] += attr["num_raw_evals"]
 
 
 def eval(problem, cfgfile, seed=42, grid_search=False, coarse_grained_islands=False,
-         remove_init_duplicates=True, custom_logger=None):
+         remove_init_duplicates=True, custom_logger=None, multiprocessing=True,
+         early_stop_fitness_threshold=1e-12):
 
     regressor_params, config_file_data = load_config_data(cfgfile)
 
@@ -327,6 +381,7 @@ def eval(problem, cfgfile, seed=42, grid_search=False, coarse_grained_islands=Fa
         "penalty": penalty,
         "fitness_scale": fitness_scale,
         "tarpeian_length_threshold": tarpeian_length_threshold,
+        "const_optimizer": config_file_data["gp"].get("const_optimizer", "pso"),
     }
 
     gpsr = gps.GPSymbolicRegressor(
@@ -345,8 +400,9 @@ def eval(problem, cfgfile, seed=42, grid_search=False, coarse_grained_islands=Fa
         batch_size=batch_size,
         remove_init_duplicates=remove_init_duplicates,
         save_detailed_log=False,
-        early_stop_fitness_threshold=1e-12,
+        early_stop_fitness_threshold=early_stop_fitness_threshold,
         coarse_grained_islands=coarse_grained_islands,
+        multiprocessing=multiprocessing,
         **regressor_params,
     )
 
@@ -394,7 +450,7 @@ def eval(problem, cfgfile, seed=42, grid_search=False, coarse_grained_islands=Fa
         best_model = best_estimator.get_best_individuals(n_ind=1)[0]
 
     try:
-        best_model_sympy = sp.simplify(best_estimator.get_best_individual_sympy())
+        best_model_sympy = sp.simplify(best_estimator.get_best_individuals_sympy()[0])
         best_model_str = str(best_model_sympy)
     except Exception as exc:
         print(

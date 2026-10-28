@@ -21,7 +21,7 @@ def warmup_workers():
     """Force every Ray worker to start and import the heavy dependencies.
 
     The first batch of fitness tasks otherwise pays a large one-time cost: ~10 fresh
-    worker processes import pygmo/mygrad/flex and run their first pygmo solve. Whichever
+    worker processes import pygmo/flex and run their first pygmo solve. Whichever
     strategy is timed first absorbs this cold-start, which would inflate its time and
     the reported speed-up. Warming the workers up front makes both strategies timed in
     the same (warm) steady state.
@@ -31,7 +31,7 @@ def warmup_workers():
     @ray.remote
     def _warm():
         import time as _t
-        import bench  # noqa: F401  (imports pygmo, mygrad, flex, ...)
+        import bench  # noqa: F401  (imports pygmo, flex, ...)
         import flex.gp.regressor  # noqa: F401  (registers creator classes)
 
         _t.sleep(0.3)  # hold the slot so the batch spreads across all workers
