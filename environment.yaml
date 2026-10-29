@@ -8,6 +8,7 @@ dependencies:
   - jaxopt
   - numpy
   - numba
+  # Required by dctkit.math.opt.optctrl.
   - pygmo
   - python==3.12
   - python-gmsh
@@ -28,7 +29,6 @@ dependencies:
       - "ray[default]"
       - pygmsh
       - tox
-      - mygrad
       - tox-conda
       - pmlb
       - optuna

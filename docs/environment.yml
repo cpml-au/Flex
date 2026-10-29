@@ -8,6 +8,8 @@ dependencies:
   - jax==0.5.0
   - jaxopt
   - numpy
+  - numba
+  # Required by dctkit.math.opt.optctrl.
   - pygmo
   - python==3.12
   - python-gmsh
@@ -19,6 +21,8 @@ dependencies:
   - typeguard
   - yaml
   - pygraphviz
+  # Required by dctkit.math.opt.optctrl, including when using the pygmo solver.
+  - petsc4py
   - pip
   - pip:
       - nbsphinx
@@ -26,11 +30,10 @@ dependencies:
       - myst-parser[linkify]
       - sphinx>=3.2.1
       - git+https://github.com/cpml-au/dctkit
-      - git+https://github.com/cpml-au/deap
+      - git+https://github.com/cpml-au/deap@fa0b033ec6e242a59dc8a8f01ab51b36ff00af89
       - "ray[default]"
       - pygmsh
       - tox
-      - mygrad
       - tox-conda
       - pmlb
       - optuna

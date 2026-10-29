@@ -7,3 +7,4 @@ Tutorials
 
    tutorials/simple_sr
    tutorials/sr_dec
+   tutorials/optuna

@@ -62,13 +62,18 @@ tox -e docs
 
 ## Benchmarks
 
-To run the benchmarks, cd into the `bench` folder and execute:
+To run the benchmarks on the Nguyen and PMLB datasets, cd into the `bench` folder and
+execute:
 
 ```bash
-./bench.sh
+bash bench_Nguyen.sh
+bash bench_PMLB.sh
 ```
 
-Then, process the results using the `process_results` notebook.
+Each line of these scripts runs `python bench.py <config file> <dataset>` (for example,
+`python bench.py PMLB.yaml 1028_SWD`), which solves the problem with 10 random seeds
+and writes the training and test $R^2$ of each run to `results/<dataset>.csv`. Then,
+process the results using the `results/process_results.ipynb` notebook.
 
 ## Usage
 
@@ -166,7 +171,11 @@ ray.shutdown()
 
 Complete example scripts can be found in the `examples` directory. In particular, the
 `simple_sr.py` script may be used as a template/skeleton for defining your symbolic
-regression problem.
+regression problem. It evaluates the trees with the numba-compiled interpreter of
+`flex.gp.numba_eval` (see below), which supports the primitives of `numpy_primitives`;
+with other primitives, compile the trees into Python functions with
+`compile_individuals` or `compile_individual_with_consts` of `flex.gp.util`, as in the
+fitness function shown above.
 
 ### Fast evaluation and constant fitting with numba
 
