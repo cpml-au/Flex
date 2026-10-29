@@ -552,7 +552,11 @@ def assign_attributes(individuals_batch, attributes):
 
 
 def score_batch(individuals_batch, toolbox, X, y, **options):
-    """MSE of each individual with its stored constants (``ind.consts``)."""
+    """MSE of each individual with its stored constants (``ind.consts``).
+
+    Since lower MSE means a better model, it is suited to the ``score`` method of
+    ``GPSymbolicRegressor`` but not to validation (``validate=True``), which requires a
+    score where higher is better."""
     pset = toolbox.compile.keywords["pset"]
     return [mse(ind, pset, X, y, ind.consts) for ind in individuals_batch]
 
