@@ -1,6 +1,0 @@
-method;seed;time_s;evals_per_s;raw_evals_per_s
-flex-lm;29802;83.36;5621;1.485e+04
-flex-lm;22118;83.67;5377;1.318e+04
-flex-lm;860;76.35;5344;1.338e+04
-flex-lm;15795;77.27;5675;1.467e+04
-flex-lm;21575;77.95;5601;1.438e+04

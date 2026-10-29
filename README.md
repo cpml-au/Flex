@@ -168,6 +168,57 @@ Complete example scripts can be found in the `examples` directory. In particular
 `simple_sr.py` script may be used as a template/skeleton for defining your symbolic
 regression problem.
 
+### Fast evaluation and constant fitting with numba
+
+The module `flex.gp.numba_eval` evaluates trees built from the primitives of
+`numpy_primitives` with a numba-compiled interpreter, which avoids compiling each tree
+into a Python function. It also fits the constants of a tree (the terminals named `c`)
+by minimizing the mean squared error (MSE) with the Levenberg-Marquardt method, using
+the exact derivatives of the tree with respect to its constants.
+
+Per-tree functions, to be called inside your own fitness, score and predict functions
+(`pset` is the primitive set; its i-th argument reads the i-th column of `X`):
+
+- `fit_mse(tree, pset, X, y, x0=1.0, bounds=(-5.0, 5.0), max_iter=8)` fits the
+  constants, starting from `x0` and keeping them within `bounds`, and returns the MSE
+  and the fitted constants;
+- `mse(tree, pset, X, y, consts)` returns the MSE of the tree with the given constants;
+- `predict_tree(tree, pset, X, consts)` returns the values of the tree with the given
+  constants.
+
+Ready-made batch functions, to be passed directly to `GPSymbolicRegressor`:
+
+- `fitness_batch` (`fitness`): the fitness of an individual is its MSE after fitting its
+  constants with `fit_mse`, plus `parsimony` times its size (number of nodes plus
+  number of constants); it is 1e8 if the MSE is not finite;
+- `assign_attributes` (`callback_func`): stores the fitness and the fitted constants on
+  each individual (`ind.consts`);
+- `score_batch` (`score_func`) and `predict_batch` (`predict_func`): MSE and
+  predictions of an individual with its stored constants.
+
+The options `x0`, `bounds`, `max_iter` and `parsimony` of `fitness_batch` are set
+through `common_data`:
+
+```python
+from flex.gp.numba_eval import (
+    assign_attributes, fitness_batch, predict_batch, score_batch
+)
+
+pset.addTerminal(object, float, "c")  # constants fitted by fitness_batch
+
+gpsr = GPSymbolicRegressor(
+    pset_config=pset,
+    fitness=fitness_batch,
+    score_func=score_batch,
+    predict_func=predict_batch,
+    callback_func=assign_attributes,
+    common_data={"parsimony": 1e-4, "max_iter": 8},
+    # ...
+)
+```
+
+The complete script is `examples/simple_sr_numba.py`.
+
 ## Citing
 
 ```

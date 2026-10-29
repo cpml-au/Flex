@@ -14,6 +14,12 @@ minimizing the sum of squared errors with Levenberg-Marquardt (``fit_constants``
 
 The supported primitives are those of ``numpy_primitives`` (same definitions);
 division by zero and invalid values give inf/nan, as in numpy.
+
+User-facing helpers work on DEAP trees: ``fit_mse``, ``mse`` and ``predict_tree`` for a
+single tree, and the batch functions ``fitness_batch``, ``score_batch``,
+``predict_batch`` and ``assign_attributes``, which can be passed to
+``GPSymbolicRegressor`` as ``fitness``, ``score_func``, ``predict_func`` and
+``callback_func``.
 """
 
 import numpy as np
@@ -461,3 +467,93 @@ def fit_constants(ops, idx, X, y, x0, lower, upper, max_iter):
         else:
             lam *= 10.0
     return x, f, num_trials, num_jac
+
+
+def fit_mse(tree, pset, X, y, x0=1.0, bounds=(-5.0, 5.0), max_iter=8):
+    """MSE of a tree on the data X (samples x features), y, with its constants fitted
+    by Levenberg-Marquardt (``fit_constants``).
+
+    Args:
+        tree: the individual (DEAP ``PrimitiveTree``), whose constants are the
+            terminals named ``c``.
+        pset: the primitive set of the tree; the argument at position i reads the
+            column i of ``X``.
+        X, y: the data.
+        x0: initial value of all the constants.
+        bounds: lower and upper bound of all the constants.
+        max_iter: maximum number of iterations of Levenberg-Marquardt.
+
+    Returns:
+        the MSE (inf or nan if the tree is not finite on the data) and the fitted
+        constants (empty array if the tree has none).
+    """
+    ops, idx, num_consts = encode(tree, pset.arguments)
+    y = np.ravel(y)
+    if num_consts == 0:
+        return sse(ops, idx, X, y, np.empty(0)) / len(y), np.empty(0)
+    ones = np.ones(num_consts)
+    consts, f, _, _ = fit_constants(
+        ops, idx, X, y, x0 * ones, bounds[0] * ones, bounds[1] * ones, max_iter
+    )
+    return f / len(y), consts
+
+
+def mse(tree, pset, X, y, consts=()):
+    """MSE of a tree with the given constants on the data X (samples x features), y."""
+    ops, idx, _ = encode(tree, pset.arguments)
+    y = np.ravel(y)
+    return sse(ops, idx, X, y, np.asarray(consts, dtype=float)) / len(y)
+
+
+def predict_tree(tree, pset, X, consts=()):
+    """Values of a tree with the given constants on the data X (samples x features)."""
+    ops, idx, _ = encode(tree, pset.arguments)
+    return predict(ops, idx, X, np.asarray(consts, dtype=float))
+
+
+# Batch functions for GPSymbolicRegressor: fitness_batch (``fitness``), score_batch
+# (``score_func``), predict_batch (``predict_func``) and assign_attributes
+# (``callback_func``). The options of fitness_batch are set through ``common_data``,
+# which the regressor passes to all three functions.
+
+
+def fitness_batch(individuals_batch, toolbox, X, y, x0=1.0, bounds=(-5.0, 5.0),
+                  max_iter=8, parsimony=0.0):
+    """Fitness of each individual: its MSE with the constants fitted by ``fit_mse``
+    plus ``parsimony`` times its size (tree length plus number of constants); 1e8 if
+    the MSE is not finite.
+
+    Returns:
+        for each individual, a dict with the fitness (tuple) and the fitted constants,
+        stored on the individual by ``assign_attributes``.
+    """
+    pset = toolbox.compile.keywords["pset"]
+    attributes = []
+    for tree in individuals_batch:
+        MSE, consts = fit_mse(tree, pset, X, y, x0, bounds, max_iter)
+        if np.isfinite(MSE):
+            value = MSE + parsimony * (len(tree) + len(consts))
+        else:
+            value = 1e8
+        attributes.append({"fitness": (value,), "consts": consts})
+    return attributes
+
+
+def assign_attributes(individuals_batch, attributes):
+    """Stores the fitness and the constants returned by ``fitness_batch`` on the
+    individuals (``ind.fitness.values`` and ``ind.consts``)."""
+    for ind, attr in zip(individuals_batch, attributes):
+        ind.fitness.values = attr["fitness"]
+        ind.consts = attr["consts"]
+
+
+def score_batch(individuals_batch, toolbox, X, y, **options):
+    """MSE of each individual with its stored constants (``ind.consts``)."""
+    pset = toolbox.compile.keywords["pset"]
+    return [mse(ind, pset, X, y, ind.consts) for ind in individuals_batch]
+
+
+def predict_batch(individuals_batch, toolbox, X, **options):
+    """Predictions of each individual with its stored constants (``ind.consts``)."""
+    pset = toolbox.compile.keywords["pset"]
+    return [predict_tree(ind, pset, X, ind.consts) for ind in individuals_batch]

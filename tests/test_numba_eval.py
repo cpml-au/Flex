@@ -4,9 +4,23 @@ import warnings
 
 import numpy as np
 from deap import base, gp
-from flex.gp.numba_eval import encode, fit_constants, predict, sse, sse_normal_equations
+from flex.gp.numba_eval import (
+    assign_attributes,
+    encode,
+    fit_constants,
+    fit_mse,
+    fitness_batch,
+    mse,
+    predict,
+    predict_batch,
+    predict_tree,
+    score_batch,
+    sse,
+    sse_normal_equations,
+)
 from flex.gp.numpy_primitives import numpy_primitives
 from flex.gp.primitives import add_primitives_to_pset_from_dict
+from flex.gp.regressor import GPSymbolicRegressor
 from flex.gp.util import compile_individual_with_consts
 
 
@@ -151,3 +165,42 @@ def test_fit_constants():
     assert np.allclose(consts, [3.39, 2.12, 1.78])
     assert f < 1e-20
     assert num_trials <= 8 and num_jac <= num_trials + 1
+
+
+def test_tree_helpers():
+    pset, _ = make_pset(1)
+    X = np.linspace(-1.0, 1.0, 20).reshape(-1, 1)
+    y = 2.5 * np.sin(X[:, 0]) + 0.7
+    tree = gp.PrimitiveTree.from_string("add(mul(c, sin(x)), c)", pset)
+    MSE, consts = fit_mse(tree, pset, X, y)
+    assert np.allclose(consts, [2.5, 0.7])
+    assert MSE < 1e-20
+    assert mse(tree, pset, X, y, consts) == MSE
+    assert np.allclose(predict_tree(tree, pset, X, consts), y)
+
+    # tree without constants
+    tree = gp.PrimitiveTree.from_string("sin(x)", pset)
+    MSE, consts = fit_mse(tree, pset, X, y)
+    assert len(consts) == 0
+    assert np.isclose(MSE, np.mean((np.sin(X[:, 0]) - y) ** 2))
+
+
+def test_regressor_with_batch_functions():
+    pset, _ = make_pset(1)
+    X = np.linspace(-1.0, 1.0, 20).reshape(-1, 1)
+    y = 2.5 * np.sin(X[:, 0]) + 0.7
+    gpsr = GPSymbolicRegressor(
+        pset_config=pset,
+        fitness=fitness_batch,
+        score_func=score_batch,
+        predict_func=predict_batch,
+        callback_func=assign_attributes,
+        common_data={"parsimony": 1e-6},
+        seed_str=["add(mul(c, sin(x)), c)"],
+        num_individuals=20,
+        generations=2,
+        multiprocessing=False,
+    )
+    gpsr.fit(X, y)
+    assert gpsr.score(X, y) < 1e-20
+    assert np.allclose(gpsr.predict(X), y)
