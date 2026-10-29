@@ -30,9 +30,9 @@ gp:
     kargs: "{}"
   scaleXy: False
   tarpeian_length_threshold: 50
-  final_model_selection: mse
   batch_size: 200
   use_constants: False
+  const_optimizer: lm
   remove_init_duplicates: False
   primitives:
     imports:

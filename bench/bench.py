@@ -1,5 +1,5 @@
 # import matplotlib.pyplot as plt
-from deap import gp, base
+from deap import gp
 
 from flex.gp import regressor as gps
 from flex.gp import numba_eval
@@ -106,59 +106,16 @@ def safe_r2_score(y_true, y_pred):
         return np.nan
 
 
-def gaussian_iid_negative_log_likelihood(mse, n_samples):
-    """Total Gaussian i.i.d. negative log-likelihood with MLE variance."""
-    eps = 1e-12
-    sigma2 = max(mse, eps)
-    n = max(int(n_samples), 1)
-    return 0.5 * n * (np.log(2.0 * np.pi * sigma2) + 1.0)
-
-
-def bic_gaussian_iid(mse, n_samples, model_size):
-    """Bayesian Information Criterion under Gaussian i.i.d. residuals."""
-    nll = gaussian_iid_negative_log_likelihood(mse, n_samples)
-    n = max(int(n_samples), 2)
-    k = max(int(model_size), 1)
-    return 2.0 * nll + k * np.log(n)
-
-
 def compute_fitness_value(MSE, n_samples, model_size, penalty):
     # Evolution fitness: only MSE + linear size regularization.
-    # BIC is reserved for optional final model selection at the end.
     return MSE + penalty["reg_param"] * model_size
 
 
-def select_best_model_by_bic(estimator, pset, X, y):
-    """
-    Select best individual in the final population using BIC.
-
-    This is intended for end-of-evolution model selection only.
-    """
-    toolbox = base.Toolbox()
-    toolbox.register("compile", gp.compile, pset=pset)
-
-    best = None
-    best_bic = np.inf
-
-    for ind in estimator.get_population_individuals():
-        consts = getattr(ind, "consts", [])
-        if consts is None:
-            continue
-        callable, _ = compile_individual_with_consts(ind, toolbox)
-        mse = compute_MSE(callable, X, y, consts=consts)
-        model_size = len(ind) + len(consts)
-        bic = bic_gaussian_iid(mse, y.shape[0], model_size)
-        if bic < best_bic:
-            best_bic = bic
-            best = ind
-
-    if best is None:
-        raise RuntimeError(
-            "Unable to select a best model by BIC from final population."
-        )
-
-    estimator._best = best
-    return best, best_bic
+def compute_MSE_numba(tree, pset, X, y, consts):
+    """MSE of the tree with the given constants, evaluated by the numba interpreter;
+    1e8 if it is not finite."""
+    MSE = numba_eval.mse(tree, pset, X, y, consts)
+    return MSE if math.isfinite(MSE) else 1e8
 
 
 def eval_MSE_and_fit_constants_numba(tree, toolbox, X, y):
@@ -240,13 +197,9 @@ def predict(
     const_optimizer,
 ):
 
-    predictions = [None] * len(individuals_batch)
-
-    for i, tree in enumerate(individuals_batch):
-        callable, _ = compile_individual_with_consts(tree, toolbox)
-        predictions[i] = eval_model(callable, X, consts=tree.consts)
-
-    return predictions
+    pset = toolbox.compile.keywords["pset"]
+    return [numba_eval.predict_tree(tree, pset, X, tree.consts)
+            for tree in individuals_batch]
 
 
 def compute_MSEs(
@@ -260,13 +213,9 @@ def compute_MSEs(
     const_optimizer,
 ):
 
-    total_errs = [None] * len(individuals_batch)
-
-    for i, tree in enumerate(individuals_batch):
-        callable, _ = compile_individual_with_consts(tree, toolbox)
-        total_errs[i] = compute_MSE(callable, X, y, consts=tree.consts)
-
-    return total_errs
+    pset = toolbox.compile.keywords["pset"]
+    return [compute_MSE_numba(tree, pset, X, y, tree.consts)
+            for tree in individuals_batch]
 
 
 def compute_attributes(
@@ -433,18 +382,7 @@ def eval(problem, cfgfile, seed=42, grid_search=False, coarse_grained_islands=Fa
     else:
         best_estimator = best_estimator
 
-    final_model_selection = config_file_data["gp"].get(
-        "final_model_selection", "fitness"
-    )
-    if final_model_selection == "bic":
-        best_model, best_bic = select_best_model_by_bic(
-            estimator=best_estimator,
-            pset=pset,
-            X=X_train_scaled,
-            y=y_train_scaled,
-        )
-    else:
-        best_model = best_estimator.get_best_individuals(n_ind=1)[0]
+    best_model = best_estimator.get_best_individuals(n_ind=1)[0]
 
     try:
         best_model_sympy = sp.simplify(best_estimator.get_best_individuals_sympy()[0])
