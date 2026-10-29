@@ -3,6 +3,7 @@ from deap import gp
 
 from flex.gp import regressor as gps
 from flex.gp import numba_eval
+from flex.gp.numba_eval import assign_attributes, predict_batch, score_batch
 from flex.gp.util import (
     get_features_batch,
     load_config_data,
@@ -33,13 +34,6 @@ def compute_fitness_value(MSE, model_size, penalty):
     return MSE + penalty["reg_param"] * model_size
 
 
-def compute_MSE_numba(tree, pset, X, y, consts):
-    """MSE of the tree with the given constants, evaluated by the numba interpreter;
-    1e8 if it is not finite."""
-    MSE = numba_eval.mse(tree, pset, X, y, consts)
-    return MSE if math.isfinite(MSE) else 1e8
-
-
 def eval_MSE_and_fit_constants_numba(tree, toolbox, X, y):
     """MSE of the tree with its constants fitted by Levenberg-Marquardt (at most 8
     iterations, constants in [-5, 5] starting from 1), with the tree evaluated by the
@@ -48,35 +42,6 @@ def eval_MSE_and_fit_constants_numba(tree, toolbox, X, y):
     if not math.isfinite(MSE):
         MSE = 1e8
     return MSE, consts
-
-
-def predict(
-    individuals_batch,
-    toolbox,
-    X,
-    penalty,
-    fitness_scale,
-    tarpeian_length_threshold,
-):
-
-    pset = toolbox.compile.keywords["pset"]
-    return [numba_eval.predict_tree(tree, pset, X, tree.consts)
-            for tree in individuals_batch]
-
-
-def compute_MSEs(
-    individuals_batch,
-    toolbox,
-    X,
-    y,
-    penalty,
-    fitness_scale,
-    tarpeian_length_threshold,
-):
-
-    pset = toolbox.compile.keywords["pset"]
-    return [compute_MSE_numba(tree, pset, X, y, tree.consts)
-            for tree in individuals_batch]
 
 
 def compute_attributes(
@@ -131,12 +96,6 @@ def compute_attributes(
     return attributes
 
 
-def assign_attributes(individuals_batch, attributes):
-    for ind, attr in zip(individuals_batch, attributes):
-        ind.consts = attr["consts"]
-        ind.fitness.values = attr["fitness"]
-
-
 def eval(problem, cfgfile, seed=42, grid_search=False, coarse_grained_islands=False,
          remove_init_duplicates=True, custom_logger=None, multiprocessing=True,
          early_stop_fitness_threshold=1e-12):
@@ -189,8 +148,8 @@ def eval(problem, cfgfile, seed=42, grid_search=False, coarse_grained_islands=Fa
     gpsr = gps.GPSymbolicRegressor(
         pset_config=pset,
         fitness=compute_attributes,
-        predict_func=predict,
-        score_func=compute_MSEs,
+        predict_func=predict_batch,
+        score_func=score_batch,
         common_data=common_params,
         callback_func=callback_func,
         custom_logger=custom_logger,
