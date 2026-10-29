@@ -10,14 +10,13 @@ training fitness reached by each.
 import time
 import random
 import warnings
-import re
 
 import numpy as np
 import ray
 from deap import gp
 
 from flex.gp.regressor import GPSymbolicRegressor
-from flex.gp.util import detect_nested_trigonometric_functions, compile_individuals
+from flex.gp.util import get_features_batch, compile_individuals
 from flex.gp.primitives import add_primitives_to_pset_from_dict
 
 
@@ -27,24 +26,6 @@ from flex.gp.primitives import add_primitives_to_pset_from_dict
 # hides the effect of the parallelization strategy).
 x = np.linspace(-1.0, 1.0, 2000).reshape(-1, 1)
 y = (x**4 + x**3 + x**2 + x).ravel()
-
-
-def check_trig_fn(ind):
-    return len(re.findall("cos", str(ind))) + len(re.findall("sin", str(ind)))
-
-
-def check_nested_trig_fn(ind):
-    return detect_nested_trigonometric_functions(str(ind))
-
-
-def get_features_batch(
-    individuals_batch,
-    individ_feature_extractors=[len, check_nested_trig_fn, check_trig_fn],
-):
-    features_batch = [
-        [fe(i) for i in individuals_batch] for fe in individ_feature_extractors
-    ]
-    return features_batch[0], features_batch[1], features_batch[2]
 
 
 def eval_MSE_sol(individual, X, y):

@@ -4,9 +4,8 @@ from flex.gp.regressor import GPSymbolicRegressor
 import numpy as np
 import ray
 import warnings
-import re
 from flex.gp.util import (
-    detect_nested_trigonometric_functions,
+    get_features_batch,
     compile_individuals,
     load_config_data,
 )
@@ -16,28 +15,6 @@ from flex.gp.primitives import add_primitives_to_pset_from_dict
 # Ground truth
 x = np.array([x / 10.0 for x in range(-10, 10)]).reshape(-1, 1)
 y = (x**4 + x**3 + x**2 + x).ravel()
-
-
-def check_trig_fn(ind):
-    return len(re.findall("cos", str(ind))) + len(re.findall("sin", str(ind)))
-
-
-def check_nested_trig_fn(ind):
-    return detect_nested_trigonometric_functions(str(ind))
-
-
-def get_features_batch(
-    individuals_batch,
-    individ_feature_extractors=[len, check_nested_trig_fn, check_trig_fn],
-):
-    features_batch = [
-        [fe(i) for i in individuals_batch] for fe in individ_feature_extractors
-    ]
-
-    individ_length = features_batch[0]
-    nested_trigs = features_batch[1]
-    num_trigs = features_batch[2]
-    return individ_length, nested_trigs, num_trigs
 
 
 def eval_MSE_sol(individual, X, y):

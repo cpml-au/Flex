@@ -3,7 +3,7 @@ from deap import gp
 
 from flex.gp import regressor as gps
 from flex.gp import numba_eval
-from flex.gp.util import load_config_data
+from flex.gp.util import get_features_batch, load_config_data
 from flex.gp.primitives import add_primitives_to_pset_from_dict
 import numpy as np
 import ray
@@ -22,20 +22,6 @@ import sympy as sp
 # silence numpy warnings (overflow, invalid values) of the evaluated models once,
 # instead of at each model evaluation
 warnings.filterwarnings("ignore")
-
-
-def trig_features(ind):
-    """Returns 1 if a sin/cos node (including arcsin/arccos) has another one in its
-    subtree (0 otherwise), and the number of sin/cos nodes."""
-    is_trig = [
-        isinstance(node, gp.Primitive) and ("sin" in node.name or "cos" in node.name)
-        for node in ind
-    ]
-    nested = any(
-        is_trig[i] and any(is_trig[i + 1 : ind.searchSubtree(i).stop])
-        for i in range(len(ind))
-    )
-    return int(nested), sum(is_trig)
 
 
 def sanitize_array_for_metrics(arr, name, clip_value=1e150):
@@ -75,12 +61,6 @@ def eval_MSE_and_fit_constants_numba(tree, toolbox, X, y):
     if not math.isfinite(MSE):
         MSE = 1e8
     return MSE, consts
-
-
-def get_features_batch(individuals_batch):
-    individ_length = [len(ind) for ind in individuals_batch]
-    nested_trigs, num_trigs = zip(*[trig_features(ind) for ind in individuals_batch])
-    return individ_length, nested_trigs, num_trigs
 
 
 def predict(

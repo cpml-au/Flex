@@ -1,5 +1,5 @@
 from flex.gp.util import (
-    detect_nested_trigonometric_functions,
+    get_features_batch,
     compile_individual_with_consts,
     load_config_data,
 )
@@ -8,7 +8,6 @@ from flex.gp.primitives import add_primitives_to_pset_from_dict
 import numpy as np
 import warnings
 import pygmo as pg
-import re
 import mygrad as mg
 from mygrad._utils.lock_management import mem_guard_off
 from functools import partial
@@ -142,28 +141,6 @@ def eval_MSE_and_tune_constants(tree, toolbox, X, y):
         MSE = compute_MSE(individual, X, y)
         consts = []
     return MSE, consts
-
-
-def check_trig_fn(ind):
-    return len(re.findall("cos", str(ind))) + len(re.findall("sin", str(ind)))
-
-
-def check_nested_trig_fn(ind):
-    return detect_nested_trigonometric_functions(str(ind))
-
-
-def get_features_batch(
-    individuals_batch,
-    individ_feature_extractors=[len, check_nested_trig_fn, check_trig_fn],
-):
-    features_batch = [
-        [fe(i) for i in individuals_batch] for fe in individ_feature_extractors
-    ]
-
-    individ_length = features_batch[0]
-    nested_trigs = features_batch[1]
-    num_trigs = features_batch[2]
-    return individ_length, nested_trigs, num_trigs
 
 
 def predict(individuals_batch, toolbox, X, penalty, fitness_scale):

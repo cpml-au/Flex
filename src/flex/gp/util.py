@@ -77,40 +77,26 @@ def load_config_data(filename):
     return regressor_params, config_file_data
 
 
-def detect_nested_trigonometric_functions(equation):
-    # List of trigonometric functions
-    trig_functions = ["sin", "cos"]
-    nested = 0  # Flag to indicate if nested functions are found
-    function_depth = 0  # Track depth within trigonometric function calls
-    i = 0
+def trig_features(ind):
+    """Returns 1 if a sin/cos node (including arcsin/arccos) has another one in its
+    subtree (0 otherwise), and the number of sin/cos nodes."""
+    is_trig = [
+        isinstance(node, gp.Primitive) and ("sin" in node.name or "cos" in node.name)
+        for node in ind
+    ]
+    nested = any(
+        is_trig[i] and any(is_trig[i + 1 : ind.searchSubtree(i).stop])
+        for i in range(len(ind))
+    )
+    return int(nested), sum(is_trig)
 
-    while i < len(equation) and not nested:
-        # Look for trigonometric function
-        trig_found = any(
-            equation[i : i + len(trig)].lower() == trig for trig in trig_functions
-        )
-        if trig_found:
-            # If a trig function is found, look for its opening parenthesis
-            j = i
-            while j < len(equation) and equation[j] not in ["(", " "]:
-                j += 1
-            if j < len(equation) and equation[j] == "(":
-                if function_depth > 0:
-                    # We are already inside a trig function, this is a nested trig
-                    # function
-                    nested = 1
-                function_depth += 1
-                i = j  # Move i to the position of '('
-        elif equation[i] == "(" and function_depth > 0:
-            # Increase depth if we're already in a trig function
-            function_depth += 1
-        elif equation[i] == ")":
-            if function_depth > 0:
-                # Leaving a trigonometric function or nested parentheses
-                function_depth -= 1
-        i += 1
 
-    return nested
+def get_features_batch(individuals_batch):
+    """Returns the lengths of the individuals and their ``trig_features`` (nested
+    sin/cos flags and numbers of sin/cos nodes)."""
+    individ_length = [len(ind) for ind in individuals_batch]
+    nested_trigs, num_trigs = zip(*[trig_features(ind) for ind in individuals_batch])
+    return individ_length, nested_trigs, num_trigs
 
 
 def mapper(f, individuals, toolbox_ref, batch_size):
