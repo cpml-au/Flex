@@ -101,7 +101,7 @@ def get_features_batch(individuals_batch):
     return individ_length, nested_trigs, num_trigs
 
 
-def sanitize_array_for_metrics(arr, name, clip_value=1e150):
+def sanitize_array_for_metrics(arr, clip_value=1e150):
     """Return a finite float64 array suitable for metric computation."""
     arr = np.asarray(arr, dtype=np.float64).reshape(-1)
     arr = np.nan_to_num(arr, nan=0.0, posinf=clip_value, neginf=-clip_value)

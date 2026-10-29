@@ -229,8 +229,8 @@ def eval(problem, cfgfile, seed=42, grid_search=False, coarse_grained_islands=Fa
     if scaleXy:
         u_best = scaler_y.inverse_transform(u_best.reshape(-1, 1)).flatten()
 
-    y_test_safe = sanitize_array_for_metrics(y_test, "y_test")
-    u_best_safe = sanitize_array_for_metrics(u_best, "u_best")
+    y_test_safe = sanitize_array_for_metrics(y_test)
+    u_best_safe = sanitize_array_for_metrics(u_best)
     MSE = np.mean((u_best_safe - y_test_safe) ** 2)
     r2_test = safe_r2_score(y_test_safe, u_best_safe)
     print("MSE on the test set = ", MSE)
@@ -244,8 +244,8 @@ def eval(problem, cfgfile, seed=42, grid_search=False, coarse_grained_islands=Fa
             y_train_scaled.reshape(-1, 1)
         ).flatten()
 
-    y_train_safe = sanitize_array_for_metrics(y_train_scaled, "y_train")
-    pred_train_safe = sanitize_array_for_metrics(pred_train, "pred_train")
+    y_train_safe = sanitize_array_for_metrics(y_train_scaled)
+    pred_train_safe = sanitize_array_for_metrics(pred_train)
     MSE = np.mean((pred_train_safe - y_train_safe) ** 2)
     r2_train = safe_r2_score(y_train_safe, pred_train_safe)
     print("MSE on the training set = ", MSE)
