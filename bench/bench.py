@@ -3,10 +3,7 @@ from deap import gp
 
 from flex.gp import regressor as gps
 from flex.gp import numba_eval
-from flex.gp.util import (
-    load_config_data,
-    compile_individual_with_consts,
-)
+from flex.gp.util import load_config_data
 from flex.gp.primitives import add_primitives_to_pset_from_dict
 import numpy as np
 import ray
@@ -15,7 +12,6 @@ import math
 import time
 
 import warnings
-import pygmo as pg
 
 from sklearn.metrics import r2_score
 from datasets import generate_dataset
@@ -42,53 +38,6 @@ def trig_features(ind):
     return int(nested), sum(is_trig)
 
 
-# constant optimizers, built once per process and reused for all the individuals
-CONST_OPTIMIZERS = {}
-
-
-def get_const_optimizer(const_optimizer):
-    if const_optimizer not in CONST_OPTIMIZERS:
-        if const_optimizer == "lbfgs":
-            algo = pg.algorithm(pg.nlopt(solver="lbfgs"))
-            algo.extract(pg.nlopt).maxeval = 8
-        else:
-            algo = pg.algorithm(pg.pso(gen=10))
-        CONST_OPTIMIZERS[const_optimizer] = algo
-    return CONST_OPTIMIZERS[const_optimizer]
-
-
-def eval_model(individual, X, consts=[]):
-    num_variables = X.shape[1]
-    if num_variables > 1:
-        X = [X[:, i] for i in range(num_variables)]
-    else:
-        X = [X]
-    y_pred = individual(*X, consts)
-    return y_pred
-
-
-def compute_MSE(individual, X, y, consts=[]):
-    y_pred = eval_model(individual, X, consts)
-    # flattened: y_pred is (n, 1) for one feature, (n,) for more, scalar for no feature
-    res = y.ravel() - np.ravel(y_pred)
-    MSE = np.sum(res * res) / res.size
-
-    if np.isnan(MSE) or np.isinf(MSE):
-        MSE = 1e8
-
-    return MSE
-
-
-def compute_MSE_batch(individual, X_cols, y_col, consts):
-    """MSE of the model for each column of ``consts`` (shape: number of constants x
-    number of constant vectors), computed with a single vectorized evaluation.
-    ``X_cols`` (features) and ``y_col`` (labels) are columns of shape (samples, 1)."""
-    res = y_col - individual(*X_cols, consts)
-    MSE = np.sum(res * res, axis=0) / res.shape[0]
-    MSE[~np.isfinite(MSE)] = 1e8
-    return MSE
-
-
 def sanitize_array_for_metrics(arr, name, clip_value=1e150):
     """Return a finite float64 array suitable for metric computation."""
     arr = np.asarray(arr, dtype=np.float64).reshape(-1)
@@ -106,7 +55,7 @@ def safe_r2_score(y_true, y_pred):
         return np.nan
 
 
-def compute_fitness_value(MSE, n_samples, model_size, penalty):
+def compute_fitness_value(MSE, model_size, penalty):
     # Evolution fitness: only MSE + linear size regularization.
     return MSE + penalty["reg_param"] * model_size
 
@@ -128,59 +77,6 @@ def eval_MSE_and_fit_constants_numba(tree, toolbox, X, y):
     return MSE, consts
 
 
-def eval_MSE_and_tune_constants(tree, toolbox, X, y, const_optimizer="pso"):
-    if const_optimizer == "lm":
-        return eval_MSE_and_fit_constants_numba(tree, toolbox, X, y)
-
-    individual, num_consts = compile_individual_with_consts(tree, toolbox)
-
-    if num_consts > 0:
-
-        # features and labels as columns, shared by all the evaluations below
-        X_cols = [X[:, i : i + 1] for i in range(X.shape[1])]
-        y_col = y.reshape(-1, 1)
-        num_samples = y_col.shape[0]
-
-        x0 = np.ones(num_consts)
-
-        class fitting_problem:
-            def fitness(self, x):
-                res = y_col - individual(*X_cols, x)
-                MSE = np.vdot(res, res) / num_samples
-                return [MSE if math.isfinite(MSE) else 1e8]
-
-            def gradient(self, x):
-                # central finite differences, with all the perturbed constant vectors
-                # evaluated in a single call
-                h = 1e-8 * np.maximum(np.abs(x), 1.0)
-                idx = np.arange(num_consts)
-                C = np.repeat(x[:, None], 2 * num_consts, axis=1)
-                C[idx, idx] += h
-                C[idx, num_consts + idx] -= h
-                f = compute_MSE_batch(individual, X_cols, y_col, C)
-                return (f[:num_consts] - f[num_consts:]) / (2 * h)
-
-            def get_bounds(self):
-                return (-5.0 * np.ones(num_consts), 5.0 * np.ones(num_consts))
-
-        # PYGMO SOLVER
-        prb = pg.problem(fitting_problem())
-        algo = get_const_optimizer(const_optimizer)
-        pop = pg.population(prb, size=1)
-        pop.push_back(x0)
-        pop = algo.evolve(pop)
-        MSE = pop.champion_f[0]
-        consts = pop.champion_x
-
-        if np.isinf(MSE) or np.isnan(MSE):
-            MSE = 1e8
-
-    else:
-        MSE = compute_MSE(individual, X, y)
-        consts = []
-    return MSE, consts
-
-
 def get_features_batch(individuals_batch):
     individ_length = [len(ind) for ind in individuals_batch]
     nested_trigs, num_trigs = zip(*[trig_features(ind) for ind in individuals_batch])
@@ -194,7 +90,6 @@ def predict(
     penalty,
     fitness_scale,
     tarpeian_length_threshold,
-    const_optimizer,
 ):
 
     pset = toolbox.compile.keywords["pset"]
@@ -210,7 +105,6 @@ def compute_MSEs(
     penalty,
     fitness_scale,
     tarpeian_length_threshold,
-    const_optimizer,
 ):
 
     pset = toolbox.compile.keywords["pset"]
@@ -226,7 +120,6 @@ def compute_attributes(
     penalty,
     fitness_scale,
     tarpeian_length_threshold,
-    const_optimizer,
 ):
 
     attributes = [None] * len(individuals_batch)
@@ -240,9 +133,7 @@ def compute_attributes(
             consts = None
             fitness = (1e8,)
         else:
-            MSE, consts = eval_MSE_and_tune_constants(
-                tree, toolbox, X, y, const_optimizer
-            )
+            MSE, consts = eval_MSE_and_fit_constants_numba(tree, toolbox, X, y)
             if MSE < 1e-12:
                 # Keep fitness equal to pure error so early stopping can trigger.
                 fitness = (fitness_scale * MSE,)
@@ -254,7 +145,6 @@ def compute_attributes(
                 )
                 fitness_value = compute_fitness_value(
                     MSE=MSE,
-                    n_samples=y.shape[0],
                     model_size=model_size,
                     penalty=penalty,
                 )
@@ -327,7 +217,6 @@ def eval(problem, cfgfile, seed=42, grid_search=False, coarse_grained_islands=Fa
         "penalty": penalty,
         "fitness_scale": fitness_scale,
         "tarpeian_length_threshold": tarpeian_length_threshold,
-        "const_optimizer": config_file_data["gp"].get("const_optimizer", "pso"),
     }
 
     gpsr = gps.GPSymbolicRegressor(

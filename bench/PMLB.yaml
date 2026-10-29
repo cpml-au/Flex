@@ -29,7 +29,6 @@ gp:
   scaleXy: True
   batch_size: 10
   use_constants: True
-  const_optimizer: lm
   primitives:
     imports:
       {
