@@ -46,7 +46,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("problem", nargs="?", default="192_vineyard",
                         help="Name of a (cached) PMLB dataset.")
-    parser.add_argument("--cfg", default="PMLB_lm.yaml",
+    parser.add_argument("--cfg", default="PMLB.yaml",
                         help="Path of the YAML config file.")
     parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
