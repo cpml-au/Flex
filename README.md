@@ -186,7 +186,9 @@ The module `flex.gp.numba_eval` evaluates trees built from the primitives of
 `numpy_primitives` with a numba-compiled interpreter, which avoids compiling each tree
 into a Python function. It also fits the constants of a tree (the terminals named `c`)
 by minimizing the mean squared error (MSE) with the Levenberg-Marquardt method, using
-the exact derivatives of the tree with respect to its constants.
+the exact derivatives of the tree with respect to its constants. Numerical terminals
+(fixed numbers added with `pset.addTerminal`, or ephemeral constants) are evaluated
+with their values and are not fitted.
 
 Per-tree functions, to be called inside your own fitness, score and predict functions
 (`pset` is the primitive set; its i-th argument reads the i-th column of `X`):

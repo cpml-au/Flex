@@ -1,11 +1,13 @@
 """Evaluation of scalar DEAP trees with a numba-compiled interpreter, and fit of their
 constants with Levenberg-Marquardt.
 
-A tree is encoded (``encode``) in prefix order as two integer arrays: the opcode of
-each node and, for the leaves, the index of the feature (column of ``X``) or of the
-constant. The interpreter visits the nodes from the last to the first with a stack and
-evaluates each node on blocks of data points: the opcode is dispatched once per node
-and block, and the loop over the points of a block can be vectorized by the compiler.
+A tree is encoded (``encode``) in prefix order as three arrays: the opcode of each
+node, the index of the feature (column of ``X``) or of the constant read by each leaf,
+and the value of each numerical terminal (fixed numbers, such as ``1.0`` or ephemeral
+constants, which are not fitted). The interpreter visits the nodes from the last to the
+first with a stack and evaluates each node on blocks of data points: the opcode is
+dispatched once per node and block, and the loop over the points of a block can be
+vectorized by the compiler.
 
 The derivatives of the tree with respect to its constants are computed exactly in the
 same pass (forward mode): each stack entry holds the values of a node and their
@@ -26,10 +28,11 @@ import numpy as np
 from deap import gp
 from numba import njit
 
-# opcodes of the leaves, of the unary and of the binary primitives
-VAR, CONST = 0, 1
-SIN, ARCSIN, COS, ARCCOS, EXP, LOG, PROT_LOG, SQRT, SQUARE, TANH = range(2, 12)
-ADD, SUB, MUL, DIV, POW, PROT_POW, AQ = range(12, 19)
+# opcodes of the leaves (feature, constant, number), of the unary and of the binary
+# primitives
+VAR, CONST, NUM = 0, 1, 2
+SIN, ARCSIN, COS, ARCCOS, EXP, LOG, PROT_LOG, SQRT, SQUARE, TANH = range(3, 13)
+ADD, SUB, MUL, DIV, POW, PROT_POW, AQ = range(13, 20)
 OPCODES = {
     "sin": SIN, "arcsin": ARCSIN, "cos": COS, "arccos": ARCCOS, "exp": EXP,
     "log": LOG, "prot_log": PROT_LOG, "sqrt": SQRT, "square": SQUARE, "tanh": TANH,
@@ -47,14 +50,18 @@ def encode(tree, arg_names, special_term_name="c"):
         arg_names: names of the arguments of the primitive set (``pset.arguments``):
             the argument at position i reads the column i of ``X``.
         special_term_name: name of the constant terminal; the i-th constant terminal
-            (in prefix order) reads the i-th entry of the constants.
+            (in prefix order) reads the i-th entry of the constants. The other
+            terminals whose value is not an argument name are numerical terminals.
 
     Returns:
-        the opcodes and the leaf indices (integer arrays) and the number of constants.
+        the opcodes and the leaf indices (integer arrays), the values of the
+        numerical terminals (float array, zero at the other nodes) and the number of
+        constants.
     """
     arg_index = {name: i for i, name in enumerate(arg_names)}
     ops = np.empty(len(tree), dtype=np.int64)
     idx = np.zeros(len(tree), dtype=np.int64)
+    nums = np.zeros(len(tree))
     num_consts = 0
     for i, node in enumerate(tree):
         if isinstance(node, gp.Primitive):
@@ -63,10 +70,13 @@ def encode(tree, arg_names, special_term_name="c"):
             ops[i] = CONST
             idx[i] = num_consts
             num_consts += 1
-        else:
+        elif isinstance(node.value, str):
             ops[i] = VAR
             idx[i] = arg_index[node.value]
-    return ops, idx, num_consts
+        else:
+            ops[i] = NUM
+            nums[i] = node.value
+    return ops, idx, nums, num_consts
 
 
 @njit(cache=True, error_model="numpy")
@@ -183,7 +193,7 @@ def _apply_binary(op, a, b, m):
 
 
 @njit(cache=True, error_model="numpy")
-def _eval_block(ops, idx, X, consts, start, m, V):
+def _eval_block(ops, idx, nums, X, consts, start, m, V):
     """Values of the tree at the points start, ..., start + m - 1 in V[0, :m]."""
     sp = 0
     for j in range(len(ops) - 1, -1, -1):
@@ -198,6 +208,11 @@ def _eval_block(ops, idx, X, consts, start, m, V):
             for i in range(m):
                 V[sp, i] = v
             sp += 1
+        elif op == NUM:
+            v = nums[j]
+            for i in range(m):
+                V[sp, i] = v
+            sp += 1
         elif op < ADD:
             _apply_unary(op, V[sp - 1], m)
         else:
@@ -207,27 +222,27 @@ def _eval_block(ops, idx, X, consts, start, m, V):
 
 
 @njit(cache=True, error_model="numpy")
-def predict(ops, idx, X, consts):
+def predict(ops, idx, nums, X, consts):
     """Values of the tree on the data X (samples x features)."""
     n = X.shape[0]
     V = np.empty((len(ops), BLOCK))
     out = np.empty(n)
     for start in range(0, n, BLOCK):
         m = min(BLOCK, n - start)
-        _eval_block(ops, idx, X, consts, start, m, V)
+        _eval_block(ops, idx, nums, X, consts, start, m, V)
         out[start : start + m] = V[0, :m]
     return out
 
 
 @njit(cache=True, error_model="numpy")
-def sse(ops, idx, X, y, consts):
+def sse(ops, idx, nums, X, y, consts):
     """Sum of squared errors of the tree on the data X (samples x features), y."""
     n = X.shape[0]
     V = np.empty((len(ops), BLOCK))
     total = 0.0
     for start in range(0, n, BLOCK):
         m = min(BLOCK, n - start)
-        _eval_block(ops, idx, X, consts, start, m, V)
+        _eval_block(ops, idx, nums, X, consts, start, m, V)
         for i in range(m):
             res = V[0, i] - y[start + i]
             total += res * res
@@ -281,7 +296,7 @@ def _arithmetic_derivatives(op, a, b, Da, Db, za, zb, k, m):
 
 
 @njit(cache=True, error_model="numpy")
-def sse_normal_equations(ops, idx, X, y, consts):
+def sse_normal_equations(ops, idx, nums, X, y, consts):
     """Sum of squared errors, J^T J and J^T r, where r = f - y are the residuals and J
     the Jacobian of the tree values f with respect to the constants, computed in
     forward mode (the n x k Jacobian is not stored).
@@ -321,6 +336,12 @@ def sse_normal_equations(ops, idx, X, y, consts):
                     for i in range(m):
                         D[sp, c, i] = w
                 Z[sp] = False
+                sp += 1
+            elif op == NUM:
+                v = nums[j]
+                for i in range(m):
+                    V[sp, i] = v
+                Z[sp] = True
                 sp += 1
             elif op < ADD:
                 a = V[sp - 1]
@@ -425,7 +446,7 @@ def _solve_spd(A, b):
 
 
 @njit(cache=True, error_model="numpy")
-def fit_constants(ops, idx, X, y, x0, lower, upper, max_iter):
+def fit_constants(ops, idx, nums, X, y, x0, lower, upper, max_iter):
     """Fits the constants of the tree by minimizing the sum of squared errors with
     Levenberg-Marquardt (Marquardt scaling of the damping), starting from x0 and
     keeping the constants within [lower, upper] (clipping).
@@ -439,7 +460,7 @@ def fit_constants(ops, idx, X, y, x0, lower, upper, max_iter):
         number of forward passes (Jacobian evaluations).
     """
     x = np.minimum(np.maximum(x0, lower), upper)
-    f, JTJ, JTr = sse_normal_equations(ops, idx, X, y, x)
+    f, JTJ, JTr = sse_normal_equations(ops, idx, nums, X, y, x)
     num_jac = 1
     num_trials = 0
     lam = 1e-3
@@ -457,12 +478,12 @@ def fit_constants(ops, idx, X, y, x0, lower, upper, max_iter):
             lam *= 10.0
             continue
         x_new = np.minimum(np.maximum(x + step, lower), upper)
-        f_new = sse(ops, idx, X, y, x_new)
+        f_new = sse(ops, idx, nums, X, y, x_new)
         num_trials += 1
         if f_new < f:
             x = x_new
             lam = max(lam * 0.1, 1e-12)
-            f, JTJ, JTr = sse_normal_equations(ops, idx, X, y, x)
+            f, JTJ, JTr = sse_normal_equations(ops, idx, nums, X, y, x)
             num_jac += 1
         else:
             lam *= 10.0
@@ -487,32 +508,32 @@ def fit_mse(tree, pset, X, y, x0=1.0, bounds=(-5.0, 5.0), max_iter=8):
         the MSE (inf or nan if the tree is not finite on the data) and the fitted
         constants (empty array if the tree has none).
     """
-    ops, idx, num_consts = encode(tree, pset.arguments)
+    ops, idx, nums, num_consts = encode(tree, pset.arguments)
     y = np.ravel(y)
     if num_consts == 0:
-        return sse(ops, idx, X, y, np.empty(0)) / len(y), np.empty(0)
+        return sse(ops, idx, nums, X, y, np.empty(0)) / len(y), np.empty(0)
     ones = np.ones(num_consts)
     consts, f, _, _ = fit_constants(
-        ops, idx, X, y, x0 * ones, bounds[0] * ones, bounds[1] * ones, max_iter
+        ops, idx, nums, X, y, x0 * ones, bounds[0] * ones, bounds[1] * ones, max_iter
     )
     return f / len(y), consts
 
 
 def mse(tree, pset, X, y, consts=()):
     """MSE of a tree with the given constants on the data X (samples x features), y."""
-    ops, idx, num_consts = encode(tree, pset.arguments)
+    ops, idx, nums, num_consts = encode(tree, pset.arguments)
     if len(consts) != num_consts:
         raise ValueError(f"the tree has {num_consts} constants, got {len(consts)}")
     y = np.ravel(y)
-    return sse(ops, idx, X, y, np.asarray(consts, dtype=float)) / len(y)
+    return sse(ops, idx, nums, X, y, np.asarray(consts, dtype=float)) / len(y)
 
 
 def predict_tree(tree, pset, X, consts=()):
     """Values of a tree with the given constants on the data X (samples x features)."""
-    ops, idx, num_consts = encode(tree, pset.arguments)
+    ops, idx, nums, num_consts = encode(tree, pset.arguments)
     if len(consts) != num_consts:
         raise ValueError(f"the tree has {num_consts} constants, got {len(consts)}")
-    return predict(ops, idx, X, np.asarray(consts, dtype=float))
+    return predict(ops, idx, nums, X, np.asarray(consts, dtype=float))
 
 
 # Batch functions for GPSymbolicRegressor: fitness_batch (``fitness``), score_batch
