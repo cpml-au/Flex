@@ -2,6 +2,7 @@
 from deap import gp, base
 
 from flex.gp import regressor as gps
+from flex.gp import numba_eval
 from flex.gp.util import (
     load_config_data,
     compile_individual_with_consts,
@@ -160,7 +161,36 @@ def select_best_model_by_bic(estimator, pset, X, y):
     return best, best_bic
 
 
+def eval_MSE_and_fit_constants_numba(tree, toolbox, X, y):
+    """MSE of the tree with its constants fitted by Levenberg-Marquardt (at most 8
+    iterations, constants in [-5, 5] starting from 1), with the tree evaluated by the
+    numba interpreter. Evaluations: 1 per candidate plus 1 per trial step of the
+    optimizer; raw evaluations: trial steps plus (number of constants + 1) per forward
+    pass computing the derivatives (its cost in evaluations)."""
+    arg_names = toolbox.compile.keywords["pset"].arguments
+    ops, idx, num_consts = numba_eval.encode(tree, arg_names)
+    y = y.ravel()
+    if num_consts > 0:
+        bounds = 5.0 * np.ones(num_consts)
+        consts, sse, num_trials, num_jac = numba_eval.fit_constants(
+            ops, idx, X, y, np.ones(num_consts), -bounds, bounds, 8
+        )
+        num_evals = 1 + num_trials
+        num_raw_evals = num_trials + (num_consts + 1) * num_jac
+    else:
+        consts = []
+        sse = numba_eval.sse(ops, idx, X, y, np.empty(0))
+        num_evals = num_raw_evals = 1
+    MSE = sse / len(y)
+    if not math.isfinite(MSE):
+        MSE = 1e8
+    return MSE, consts, num_evals, num_raw_evals
+
+
 def eval_MSE_and_tune_constants(tree, toolbox, X, y, const_optimizer="pso"):
+    if const_optimizer == "lm":
+        return eval_MSE_and_fit_constants_numba(tree, toolbox, X, y)
+
     individual, num_consts = compile_individual_with_consts(tree, toolbox)
 
     if num_consts > 0:

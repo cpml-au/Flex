@@ -1,7 +1,9 @@
 """Cost of one evaluation (prediction + sum of squared errors) of the same expression,
-c1*x^3 + c2*x^2 + c3*x, in flex (compiled DEAP tree, one numpy call per node) and in
-the backend of PySR (SymbolicRegression.jl ``eval_tree_array``, with and without
-turbo mode), for several numbers of data points.
+c1*x^3 + c2*x^2 + c3*x, in flex (compiled DEAP tree, one numpy call per node), in the
+numba interpreter (``flex.gp.numba_eval``) and in the backend of PySR
+(SymbolicRegression.jl ``eval_tree_array``, with and without turbo mode), for several
+numbers of data points. Also reports the cost of compiling the tree (flex) and of
+encoding it (numba interpreter).
 
 Run from the ``bench`` directory:
 
@@ -17,6 +19,7 @@ from deap import base, gp
 import pysr  # noqa: F401  (sets up the Julia environment of PySR)
 from flex.gp.primitives import add_primitives_to_pset_from_dict
 from flex.gp.util import compile_individual_with_consts, load_config_data
+from flex.gp.numba_eval import encode, sse
 from juliacall import Main as jl
 
 NUM_POINTS = [20, 200, 2000, 20000, 200000]
@@ -61,10 +64,19 @@ def main():
         "add(mul(c, mul(x, mul(x, x))), add(mul(c, mul(x, x)), mul(c, x)))", pset
     )
     f, _ = compile_individual_with_consts(tree, toolbox)
+    ops, idx, _ = encode(tree, pset.arguments)
     c = np.array([3.39, 2.12, 1.78])
     sse_default, sse_turbo = jl.make_sse(False), jl.make_sse(True)
 
-    print(f"{'points':>8}{'flex (us)':>12}{'PySR (us)':>12}{'PySR turbo (us)':>17}")
+    nrep = 20000
+    t_compile = 1e6 * timeit.timeit(
+        lambda: compile_individual_with_consts(tree, toolbox), number=nrep) / nrep
+    t_encode = 1e6 * timeit.timeit(
+        lambda: encode(tree, pset.arguments), number=nrep) / nrep
+    print(f"compile (flex) {t_compile:.2f} us, encode (numba) {t_encode:.2f} us\n")
+
+    print(f"{'points':>8}{'flex (us)':>12}{'numba (us)':>12}{'PySR (us)':>12}"
+          f"{'PySR turbo (us)':>17}")
     rng = np.random.default_rng(0)
     for n in NUM_POINTS:
         x = rng.random((n, 1))
@@ -76,10 +88,15 @@ def main():
             return np.vdot(res, res)
 
         t_flex = 1e6 * timeit.timeit(flex_sse, number=nrep) / nrep
-        Xj, yj = np.ascontiguousarray(x.T), y.ravel()
+        yr = y.ravel()
+        sse(ops, idx, x, yr, c)  # compile
+        t_numba = (
+            1e6 * timeit.timeit(lambda: sse(ops, idx, x, yr, c), number=nrep) / nrep
+        )
+        Xj, yj = np.ascontiguousarray(x.T), yr
         t_def = 1e6 * jl.time_eval(sse_default, Xj, yj, nrep)
         t_tur = 1e6 * jl.time_eval(sse_turbo, Xj, yj, nrep)
-        print(f"{n:>8}{t_flex:>12.2f}{t_def:>12.2f}{t_tur:>17.2f}")
+        print(f"{n:>8}{t_flex:>12.2f}{t_numba:>12.2f}{t_def:>12.2f}{t_tur:>17.2f}")
 
 
 if __name__ == "__main__":

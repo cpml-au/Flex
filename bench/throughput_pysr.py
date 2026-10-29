@@ -1,6 +1,7 @@
-"""Throughput (expression evaluations per second) of flex (L-BFGS constant tuning) and
-PySR at matched cores and wall time, with early stopping disabled. PySR uses the
-operators of the primitives of the flex config (``--flex-cfg``).
+"""Throughput (expression evaluations per second) of flex and PySR at matched cores and
+wall time, with early stopping disabled. PySR uses the operators of the primitives of
+the flex config (``--flex-cfg``); flex results are labelled with the constant optimizer
+of the config (e.g. ``flex-lbfgs``).
 
 Evaluations follow the convention of SymbolicRegression.jl (PySR ``num_evals``): one
 per candidate expression plus the objective calls of the constant optimizer, without
@@ -18,7 +19,7 @@ Both throughputs are averages over the window from ``--timeout`` - 20 s to
   make the fit last at least ``--timeout``; the config is copied to ``results/`` with
   that number of generations.
 
-Results are written to ``results/throughput_<problem>_<cores>c_<method>.csv``.
+Results are written to ``results/throughput_<problem>_<cores>c_<label>.csv``.
 
 Run from the ``bench`` directory:
 
@@ -132,7 +133,7 @@ def main():
     parser.add_argument("--flex-generations", type=int, help="Required for flex.")
     parser.add_argument("--turbo", action="store_true", help="PySR turbo mode.")
     parser.add_argument("--num-seeds", type=int, default=5)
-    parser.add_argument("--methods", nargs="+", default=["flex-lbfgs", "pysr"])
+    parser.add_argument("--methods", nargs="+", default=["flex", "pysr"])
     args = parser.parse_args()
 
     # the number of Julia threads must be set before juliacall is imported
@@ -145,13 +146,14 @@ def main():
         cfg = yaml.safe_load(f)
     binary_operators, unary_operators = pysr_operators(cfg)
 
-    if "flex-lbfgs" in args.methods:
+    labels = {"pysr": "pysr", "flex": f"flex-{cfg['gp'].get('const_optimizer', 'pso')}"}
+    if "flex" in args.methods:
         cfg["gp"]["generations"] = args.flex_generations
-        flex_cfg = pathlib.Path("results") / f"throughput_flex-lbfgs_{tag}.yaml"
+        flex_cfg = pathlib.Path("results") / f"throughput_{labels['flex']}_{tag}.yaml"
         with open(flex_cfg, "w") as f:
             yaml.safe_dump(cfg, f, sort_keys=False)
 
-    if "flex-lbfgs" in args.methods and args.cores > 1:
+    if "flex" in args.methods and args.cores > 1:
         import ray
         from bench_strategies import warmup_workers
 
@@ -168,18 +170,18 @@ def main():
         ).fit(X, X[:, 0])
 
     for method in args.methods:
-        out = f"results/throughput_{tag}_{method}.csv"
+        out = f"results/throughput_{tag}_{labels[method]}.csv"
         with open(out, "w") as f:
             f.write(";".join(HEADER) + "\n")
         for seed in seeds:
-            print(f"\n### {method}  seed={seed}\n", flush=True)
+            print(f"\n### {labels[method]}  seed={seed}\n", flush=True)
             if method == "pysr":
                 res = run_pysr(args.problem, args.timeout, seed, binary_operators,
                                unary_operators, args.turbo)
             else:
                 res = run_flex(args.problem, flex_cfg, seed, args.cores, args.timeout)
             fit_time, evals_per_s, raw_evals_per_s = res
-            row = [method, seed, f"{fit_time:.2f}", f"{evals_per_s:.4g}",
+            row = [labels[method], seed, f"{fit_time:.2f}", f"{evals_per_s:.4g}",
                    f"{raw_evals_per_s:.4g}"]
             with open(out, "a") as f:
                 f.write(";".join(str(v) for v in row) + "\n")

@@ -26,6 +26,8 @@ PHASES = [
     ("objective of the constant optimizer (fitness)", ("bench.py", "fitness")),
     ("gradient (vectorized finite differences)", ("bench.py", "gradient")),
     ("tree evaluation without constants (compute_MSE)", ("bench.py", "compute_MSE")),
+    ("numba evaluation and constant fitting (lm)",
+     ("bench.py", "eval_MSE_and_fit_constants_numba")),
     ("pygmo population init (evaluates all points)", ("__init__.py", "_population_init")),
     ("compile tree (compile_individual_with_consts)",
      ("util.py", "compile_individual_with_consts")),

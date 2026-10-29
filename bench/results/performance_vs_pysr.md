@@ -1,27 +1,44 @@
-# Performance of flex and comparison with PySR (2026-10-28)
+# Performance of flex and comparison with PySR (2026-10-28, numba/LM results 2026-10-29)
 
 ## Setup
 
 - Machine: AMD Ryzen Threadripper 7960X (24 cores, 2 threads per core), 125 GB RAM.
   Runs are pinned with `taskset` to physical cores that no other job was using:
   CPU 0 for 1-core runs, CPUs 0-7 for 8-core runs (hyperthread siblings left free).
-- Environment: conda env `alpine` (Python 3.12), flex at commit `019b589` plus the
-  uncommitted changes listed below, PySR 2.7.2 (SymbolicRegression.jl 2.7.2,
-  Julia 1.11.9).
-- flex uses L-BFGS (`const_optimizer: lbfgs`, at most 8 objective evaluations, central
-  finite-difference gradient) or PSO (`const_optimizer: pso`, 2 particles, 10
-  generations) to tune the constants of every individual that has constants.
+- Environment: conda env `alpine` (Python 3.12, numba 0.62.1), flex on branch
+  `perf-vs-pysr` (changes listed below, starting from commit `019b589`), PySR 2.7.2
+  (SymbolicRegression.jl 2.7.2, Julia 1.11.9).
+- flex tunes the constants of every individual that has constants with one of:
+  - PSO (`const_optimizer: pso`, pygmo, 2 particles, 10 generations);
+  - L-BFGS (`const_optimizer: lbfgs`, pygmo nlopt, at most 8 objective evaluations,
+    central finite-difference gradient);
+  - Levenberg-Marquardt (`const_optimizer: lm`, numba, at most 8 iterations, exact
+    derivatives); the tree is then evaluated by the numba interpreter instead of being
+    compiled to a numpy function. With pygmo and LM the constants start from 1 and are
+    kept in [-5, 5].
   The initial population is not deduplicated (`remove_init_duplicates=False`).
 - PySR uses the same operators and `maxsize=40`, `precision=64`, `batching=False`
   (full dataset at each evaluation, as in flex), multithreading with one Julia
   thread per core.
 
-## Changes to the benchmark code
+## Changes to the code
 
-All in `bench/` (`bench.py` and new scripts):
+Library:
 
-- `const_optimizer` config key: `pso` or `lbfgs`; each optimizer is built once per
-  process and reused.
+- New module `src/flex/gp/numba_eval.py`: numba-compiled interpreter of scalar trees
+  (primitives of `numpy_primitives`). `encode` converts a DEAP tree into arrays of
+  opcodes and leaf indices; `predict` and `sse` evaluate each node on blocks of 256
+  data points; `sse_normal_equations` computes in the same pass the derivatives with
+  respect to the constants (forward mode) and accumulates J^T J and J^T r;
+  `fit_constants` fits the constants with Levenberg-Marquardt. Tests in
+  `tests/test_numba_eval.py`.
+- `numba` added to `environment.yaml`.
+
+Benchmark code, in `bench/` (`bench.py` and new scripts):
+
+- `const_optimizer` config key: `pso`, `lbfgs` or `lm` (numba interpreter and
+  Levenberg-Marquardt, `eval_MSE_and_fit_constants_numba`); each pygmo optimizer is
+  built once per process and reused.
 - Removed a pygmo population of 70 random points that was created and discarded for
   every individual (it evaluated the model 70 times per individual).
 - L-BFGS gradient: central finite differences in which all the perturbed constant
@@ -49,16 +66,17 @@ Serial run (no Ray) on CPU 0, at most 20 generations, early stopping at MSE < 1e
 Times measured under cProfile; only the innermost functions are reported, because
 pygmo calls the Python objective from C++ and this breaks the cProfile call stack.
 
-| Phase | PSO | L-BFGS |
-|---|---|---|
-| objective of the constant optimizer | 19.4% | 9.3% |
-| gradient (vectorized finite differences) | - | 26.6% |
-| tree compilation (`compile_individual_with_consts`) | 21.7% | 18.6% |
-| variation (`varAnd`) | 20.5% | 15.8% |
-| pygmo population init | 4.9% | 4.2% |
-| parent selection | 3.4% | 2.5% |
-| generations run | 20 | 15 (exact solution found) |
-| individuals per second | 2623 | 1800 |
+| Phase | PSO | L-BFGS | LM (numba) |
+|---|---|---|---|
+| objective of the constant optimizer | 19.4% | 9.3% | - |
+| gradient (vectorized finite differences) | - | 26.6% | - |
+| numba evaluation and constant fitting | - | - | 18.5% |
+| tree compilation (`compile_individual_with_consts`) | 21.7% | 18.6% | - |
+| variation (`varAnd`) | 20.5% | 15.8% | 44.4% |
+| pygmo population init | 4.9% | 4.2% | - |
+| parent selection | 3.4% | 2.5% | 3.6% |
+| generations run | 20 | 15 (exact solution found) | 5 (exact solution found) |
+| individuals per second | 2623 | 1800 | 7646 |
 
 ### Time to solution (Nguyen-13, 8 cores, 60 s budget)
 
@@ -100,23 +118,39 @@ Speed-up from 1 to 8 cores (evals/s): flex 2.9 (Nguyen-13), 3.7 (1028_SWD), 4.0
 (225_puma8NH); PySR 5.0, 5.4, 6.0. Nguyen-13 uses the operators +, -, *, /, sin, cos,
 exp, log; the PMLB datasets (standardized) use add, sub, mul, aq = x/sqrt(1+y^2), sin.
 
+### Throughput with the numba interpreter and Levenberg-Marquardt (1 core)
+
+Same measurement as above, with flex using `const_optimizer: lm` (configs
+`Nguyen_13_consts_lm.yaml`, `PMLB_lm.yaml`). Evaluations of LM: 1 per candidate plus 1
+per trial step of the optimizer; raw evaluations: trial steps plus (number of
+constants + 1) per forward pass computing the derivatives (its cost in evaluations).
+
+| Dataset (rows x features) | flex-lm generations | flex-lm run time | flex-lm evals/s | flex-lm raw evals/s | flex-L-BFGS evals/s | PySR evals/s | flex-lm / flex-L-BFGS | PySR / flex-lm |
+|---|---|---|---|---|---|---|---|---|
+| Nguyen-13 (20 x 1) | 420 | 66.6 s | 1.34e5 | 6.64e5 | 2.46e4 | 3.42e5 | 5.5 | 2.6 |
+| 1028_SWD (1000 x 10) | 70 | 76.1 s | 3.23e4 | 9.61e4 | 1.40e4 | 1.15e5 | 2.3 | 3.6 |
+| 225_puma8NH (8192 x 8) | 20 | 78.0 s | 5.60e3 | 1.44e4 | 4.39e3 | 1.43e4 | 1.3 | 2.6 |
+
 ### Cost of one evaluation
 
-Prediction plus sum of squared errors of c1\*x^3 + c2\*x^2 + c3\*x (13 nodes), on 1 core.
+Prediction plus sum of squared errors of c1\*x^3 + c2\*x^2 + c3\*x (13 nodes), on 1 core:
+flex (compiled tree, one numpy call per node), numba interpreter (`numba_eval.sse`) and
+backend of PySR. Compiling the tree in flex takes 27.16 us, encoding it for the numba
+interpreter 1.97 us.
 
-| Points | flex (numpy) | PySR backend | PySR backend, turbo |
-|---|---|---|---|
-| 20 | 2.77 us | 0.45 us | 1.04 us |
-| 200 | 3.25 us | 0.94 us | 0.96 us |
-| 2000 | 8.76 us | 5.84 us | 10.32 us |
-| 20000 | 30.96 us | 104.73 us | 103.75 us |
-| 200000 | 305.97 us | 638.22 us | 484.05 us |
+| Points | flex (numpy) | numba interpreter | PySR backend | PySR backend, turbo |
+|---|---|---|---|---|
+| 20 | 2.85 us | 0.47 us | 0.46 us | 0.49 us |
+| 200 | 3.19 us | 1.14 us | 1.04 us | 1.03 us |
+| 2000 | 8.03 us | 8.41 us | 5.80 us | 33.32 us |
+| 20000 | 30.36 us | 80.87 us | 95.14 us | 130.85 us |
+| 200000 | 276.44 us | 825.73 us | 640.74 us | 506.23 us |
 
 ## Observations
 
 - A flex tree is evaluated with one numpy call per node, which has a fixed cost of
   about 0.2 us. On small datasets this fixed cost dominates: one evaluation costs
-  about 6 times more than in PySR on 20 points, about the same on 2000 points, and
+  about 6 times more than in PySR on 20 points, 1.4 times more on 2000 points, and
   less on 20000 points or more.
 - The throughput gap shrinks with the dataset size: on 1 core, from 13.9x (20 rows)
   to 8.2x (1000 rows) and 3.3x (8192 rows).
@@ -135,17 +169,23 @@ Run from the `bench` directory with the `alpine` env.
 # single-core profiles
 env OMP_NUM_THREADS=1 taskset -c 0 python profile_flex.py Nguyen_13_consts_pso.yaml Nguyen-13 --generations 20
 env OMP_NUM_THREADS=1 taskset -c 0 python profile_flex.py Nguyen_13_consts_lbfgs.yaml Nguyen-13 --generations 20
+env OMP_NUM_THREADS=1 taskset -c 0 python profile_flex.py Nguyen_13_consts_lm.yaml Nguyen-13 --generations 20
 
 # time to solution
 env OMP_NUM_THREADS=1 taskset -c 0-7 python compare_pysr.py Nguyen-13 --cores 8 --timeout 60 --num-seeds 5
 
 # throughput, flex
-env OMP_NUM_THREADS=1 taskset -c 0 python throughput_pysr.py Nguyen-13 --cores 1 --timeout 60 --flex-generations 70 --num-seeds 5 --methods flex-lbfgs
-env OMP_NUM_THREADS=1 taskset -c 0-7 python throughput_pysr.py Nguyen-13 --cores 8 --timeout 60 --flex-generations 220 --num-seeds 5 --methods flex-lbfgs
-env OMP_NUM_THREADS=1 taskset -c 0 python throughput_pysr.py 1028_SWD --flex-cfg PMLB_lbfgs.yaml --cores 1 --timeout 60 --flex-generations 30 --num-seeds 5 --methods flex-lbfgs
-env OMP_NUM_THREADS=1 taskset -c 0-7 python throughput_pysr.py 1028_SWD --flex-cfg PMLB_lbfgs.yaml --cores 8 --timeout 60 --flex-generations 75 --num-seeds 5 --methods flex-lbfgs
-env OMP_NUM_THREADS=1 taskset -c 0 python throughput_pysr.py 225_puma8NH --flex-cfg PMLB_lbfgs.yaml --cores 1 --timeout 60 --flex-generations 11 --num-seeds 5 --methods flex-lbfgs
-env OMP_NUM_THREADS=1 taskset -c 0-7 python throughput_pysr.py 225_puma8NH --flex-cfg PMLB_lbfgs.yaml --cores 8 --timeout 60 --flex-generations 42 --num-seeds 5 --methods flex-lbfgs
+env OMP_NUM_THREADS=1 taskset -c 0 python throughput_pysr.py Nguyen-13 --cores 1 --timeout 60 --flex-generations 70 --num-seeds 5 --methods flex
+env OMP_NUM_THREADS=1 taskset -c 0-7 python throughput_pysr.py Nguyen-13 --cores 8 --timeout 60 --flex-generations 220 --num-seeds 5 --methods flex
+env OMP_NUM_THREADS=1 taskset -c 0 python throughput_pysr.py 1028_SWD --flex-cfg PMLB_lbfgs.yaml --cores 1 --timeout 60 --flex-generations 30 --num-seeds 5 --methods flex
+env OMP_NUM_THREADS=1 taskset -c 0-7 python throughput_pysr.py 1028_SWD --flex-cfg PMLB_lbfgs.yaml --cores 8 --timeout 60 --flex-generations 75 --num-seeds 5 --methods flex
+env OMP_NUM_THREADS=1 taskset -c 0 python throughput_pysr.py 225_puma8NH --flex-cfg PMLB_lbfgs.yaml --cores 1 --timeout 60 --flex-generations 11 --num-seeds 5 --methods flex
+env OMP_NUM_THREADS=1 taskset -c 0-7 python throughput_pysr.py 225_puma8NH --flex-cfg PMLB_lbfgs.yaml --cores 8 --timeout 60 --flex-generations 42 --num-seeds 5 --methods flex
+
+# throughput, flex-lm
+env OMP_NUM_THREADS=1 taskset -c 0 python throughput_pysr.py Nguyen-13 --flex-cfg Nguyen_13_consts_lm.yaml --cores 1 --timeout 60 --flex-generations 420 --num-seeds 5 --methods flex
+env OMP_NUM_THREADS=1 taskset -c 0 python throughput_pysr.py 1028_SWD --flex-cfg PMLB_lm.yaml --cores 1 --timeout 60 --flex-generations 70 --num-seeds 5 --methods flex
+env OMP_NUM_THREADS=1 taskset -c 0 python throughput_pysr.py 225_puma8NH --flex-cfg PMLB_lm.yaml --cores 1 --timeout 60 --flex-generations 20 --num-seeds 5 --methods flex
 
 # throughput, PySR
 env OMP_NUM_THREADS=1 taskset -c 0 python throughput_pysr.py Nguyen-13 --cores 1 --timeout 60 --num-seeds 5 --methods pysr --turbo
@@ -159,7 +199,7 @@ env OMP_NUM_THREADS=1 taskset -c 0-7 python throughput_pysr.py 225_puma8NH --fle
 env PYTHON_JULIACALL_THREADS=1 OMP_NUM_THREADS=1 taskset -c 0 python eval_cost_pysr.py
 ```
 
-Result files (`results/`): `profile_Nguyen_13_consts_{pso,lbfgs}_gen20.{log,prof,yaml}`,
+Result files (`results/`): `profile_Nguyen_13_consts_{pso,lbfgs,lm}_gen20.{log,prof,yaml}`,
 `compare_pysr_Nguyen-13.{csv,log}`, `throughput_<dataset>_<cores>c_<method>.{csv,log}`
-(with the flex config used in `throughput_flex-lbfgs_<dataset>_<cores>c.yaml`),
-`eval_cost_pysr.txt`.
+with `<method>` one of `flex-lbfgs`, `flex-lm`, `pysr` (with the flex config used in
+`throughput_<method>_<dataset>_<cores>c.yaml`), `eval_cost_pysr.txt`.
