@@ -500,14 +500,18 @@ def fit_mse(tree, pset, X, y, x0=1.0, bounds=(-5.0, 5.0), max_iter=8):
 
 def mse(tree, pset, X, y, consts=()):
     """MSE of a tree with the given constants on the data X (samples x features), y."""
-    ops, idx, _ = encode(tree, pset.arguments)
+    ops, idx, num_consts = encode(tree, pset.arguments)
+    if len(consts) != num_consts:
+        raise ValueError(f"the tree has {num_consts} constants, got {len(consts)}")
     y = np.ravel(y)
     return sse(ops, idx, X, y, np.asarray(consts, dtype=float)) / len(y)
 
 
 def predict_tree(tree, pset, X, consts=()):
     """Values of a tree with the given constants on the data X (samples x features)."""
-    ops, idx, _ = encode(tree, pset.arguments)
+    ops, idx, num_consts = encode(tree, pset.arguments)
+    if len(consts) != num_consts:
+        raise ValueError(f"the tree has {num_consts} constants, got {len(consts)}")
     return predict(ops, idx, X, np.asarray(consts, dtype=float))
 
 

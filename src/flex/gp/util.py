@@ -82,7 +82,8 @@ def trig_features(ind):
     """Returns 1 if a sin/cos node (including arcsin/arccos) has another one in its
     subtree (0 otherwise), and the number of sin/cos nodes."""
     is_trig = [
-        isinstance(node, gp.Primitive) and ("sin" in node.name or "cos" in node.name)
+        isinstance(node, gp.Primitive)
+        and ("sin" in node.name.lower() or "cos" in node.name.lower())
         for node in ind
     ]
     nested = any(

@@ -478,9 +478,6 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         """Compute the number of elitists in the population"""
         return int(self.frac_elitist * self.num_individuals)
 
-    def get_params(self, deep: bool = True):
-        return self.__dict__
-
     def __creator_toolbox_pset_config(self):
         """Initialize toolbox and individual creator based on config file.
 
@@ -541,9 +538,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         """Initialize the store data dict with the common parameters."""
         self.__data_store = dict()
 
-        if self.common_data is not None:
-            # FIXME: does everything work when the functions do not have common args?
-            self.__store_fit_score_common_args(self.common_data)
+        self.__store_fit_score_common_args(self.common_data or {})
 
     def __store_fit_score_common_args(self, data: Dict):
         """Store names and values of the arguments that are in common between
@@ -575,6 +570,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             label: key under which the data dictionary will be stored internally.
             data: dictionary of objects to store.
         """
+        data = dict(data)
         for key, value in data.items():
             # replace each item of the dataset with its obj ref
             if not isinstance(value, ray.ObjectRef) and self.multiprocessing:
@@ -789,6 +785,10 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             or self.mig_freq <= 0
         ):
             raise ValueError("mig_freq must be a positive integer.")
+        if self.generations < 1:
+            raise ValueError("generations must be a positive integer.")
+        if self.validate and X_val is None:
+            raise ValueError("validate=True requires X_val.")
 
         validated_data = validate_data(
             self,
@@ -1189,7 +1189,9 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             toolbox: the toolbox for the evolution.
         """
         for i in range(self.num_islands):
-            while True:
+            # at most 100 rounds: with large errors, few individuals may ever get
+            # below the fitness threshold
+            for _ in range(100):
                 fitnesses = toolbox.map(toolbox.evaluate_train, self.__pop[i])
                 if self.callback_func is not None:
                     self.callback_func(self.__pop[i], fitnesses)

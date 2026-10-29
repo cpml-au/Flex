@@ -37,4 +37,6 @@ conversion_rules = {
     "prot_pow": lambda *args_: "Pow(Abs({}), {})".format(*args_),
     "prot_log": lambda *args_: "log(Abs({}))".format(*args_),
     "log": lambda *args_: "log({})".format(*args_),
+    "arcsin": lambda *args_: "asin({})".format(*args_),
+    "arccos": lambda *args_: "acos({})".format(*args_),
 }
