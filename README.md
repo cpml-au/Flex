@@ -121,7 +121,10 @@ def fitness(individuals_batch, toolbox, X, y):
 
 _Optionally_, you can define a `score` function with the same arguments as those of the
 fitness function, to compute the score (e.g. $R^2$) of the best model found during the
-SR run on a given dataset.
+SR run on a given dataset. When a validation dataset is used (`validate=True`), the
+score is also computed on it at each generation and the maximum is reported as the best
+validation score, so a higher score must mean a better model (e.g. $R^2$, or the
+negative of an error).
 
 2. Set up and solve the symbolic regression problem. The configuration of the
    `GPSymbolicRegressor` object can be specified via the arguments of its constructor

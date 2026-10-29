@@ -276,6 +276,9 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         predict_func: function that returns a prediction given an individual and
             a test dataset as inputs.
         score_func: score metric used for validation and for the `score` method.
+            With ``validate=True``, a higher score must mean a better model (e.g.
+            :math:`R^2`, or the negative of an error), since the best validation
+            score reported (``max_val_score``) is the maximum over the generations.
         select_fun: string representing the selection operator to use.
         select_args: stringified dictionary of keyword arguments passed to the
             selection operator. The string is evaluated at runtime.
@@ -304,7 +307,9 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             for survival.
         common_data: dictionary of arguments shared between fitness, prediction,
           and scoring functions.
-        validate: whether to use a validation dataset.
+        validate: whether to use a validation dataset (``X_val`` in ``fit``). At each
+            generation, ``score_func`` is evaluated on it for the best individual
+            (by training fitness).
         preprocess_args: configuration for a function applied to individuals prior
           to fitness evaluation. It must contain three keys: `func`, the callable to
           execute. It must accept an individual and the toolbox as its first two
