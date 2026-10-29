@@ -206,7 +206,9 @@ Ready-made batch functions, to be passed directly to `GPSymbolicRegressor`:
 - `assign_attributes` (`callback_func`): stores the fitness and the fitted constants on
   each individual (`ind.consts`);
 - `score_batch` (`score_func`) and `predict_batch` (`predict_func`): MSE and
-  predictions of an individual with its stored constants.
+  predictions of an individual with its stored constants. Since lower MSE means a
+  better model, `score_batch` is suited to the `score` method but not to validation
+  (`validate=True`), which requires a score where higher is better.
 
 The options `x0`, `bounds`, `max_iter` and `parsimony` of `fitness_batch` are set
 through `common_data`:
