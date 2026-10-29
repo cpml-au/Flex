@@ -3,12 +3,11 @@ from deap import gp
 from flex.gp.regressor import GPSymbolicRegressor
 import numpy as np
 import ray
-import warnings
 from flex.gp.util import (
     get_features_batch,
-    compile_individuals,
     load_config_data,
 )
+from flex.gp.numba_eval import mse, predict_tree
 from flex.gp.primitives import add_primitives_to_pset_from_dict
 
 
@@ -17,51 +16,29 @@ x = np.array([x / 10.0 for x in range(-10, 10)]).reshape(-1, 1)
 y = (x**4 + x**3 + x**2 + x).ravel()
 
 
-def eval_MSE_sol(individual, X, y):
-    warnings.filterwarnings("ignore")
-
-    y_pred = individual(X).ravel()
-    MSE = np.mean(np.square(y_pred - y))
-    if np.isnan(MSE):
-        MSE = 1e5
-    return MSE, y_pred
-
-
 def predict(individuals_batch, toolbox, X, penalty):
-
-    callables = compile_individuals(toolbox, individuals_batch)
-
-    u = [None] * len(individuals_batch)
-
-    for i, ind in enumerate(callables):
-        _, u[i] = eval_MSE_sol(ind, X, None)
-
-    return u
+    pset = toolbox.compile.keywords["pset"]
+    return [predict_tree(ind, pset, X) for ind in individuals_batch]
 
 
 def score(individuals_batch, toolbox, X, y, penalty):
-
-    callables = compile_individuals(toolbox, individuals_batch)
-
-    MSE = [None] * len(individuals_batch)
-
-    for i, ind in enumerate(callables):
-        MSE[i], _ = eval_MSE_sol(ind, X, y)
-
-    return MSE
+    pset = toolbox.compile.keywords["pset"]
+    return [mse(ind, pset, X, y) for ind in individuals_batch]
 
 
 def fitness(individuals_batch, toolbox, X, y, penalty):
-    callables = compile_individuals(toolbox, individuals_batch)
+    pset = toolbox.compile.keywords["pset"]
 
     individ_length, nested_trigs, num_trigs = get_features_batch(individuals_batch)
 
     fitnesses = [None] * len(individuals_batch)
-    for i, ind in enumerate(callables):
+    for i, ind in enumerate(individuals_batch):
         if individ_length[i] >= 50:
             fitnesses[i] = (1e8,)
         else:
-            MSE, _ = eval_MSE_sol(ind, X, y)
+            MSE = mse(ind, pset, X, y)
+            if np.isnan(MSE):
+                MSE = 1e5
 
             fitnesses[i] = (
                 MSE

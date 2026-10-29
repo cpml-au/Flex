@@ -1,15 +1,11 @@
 from flex.gp.util import (
     get_features_batch,
-    compile_individual_with_consts,
     load_config_data,
 )
+from flex.gp.numba_eval import assign_attributes, fit_mse, predict_batch
 from flex.gp import regressor as gps
 from flex.gp.primitives import add_primitives_to_pset_from_dict
 import numpy as np
-import warnings
-import pygmo as pg
-import mygrad as mg
-from mygrad._utils.lock_management import mem_guard_off
 from functools import partial
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
@@ -77,92 +73,13 @@ def generate_dataset(
     )
 
 
-def eval_model(individual, X, consts=[]):
-    num_variables = X.shape[1]
-    if num_variables > 1:
-        X = [X[:, i] for i in range(num_variables)]
-    else:
-        X = [X]
-    warnings.filterwarnings("ignore")
-    y_pred = individual(*X, consts)
-    return y_pred
-
-
-def compute_MSE(individual, X, y, consts=[]):
-    y_pred = eval_model(individual, X, consts)
-    MSE = np.mean((y - y_pred) ** 2)
-
-    if np.isnan(MSE) or np.isinf(MSE):
-        MSE = 1e8
-
-    return MSE
-
-
 def eval_MSE_and_tune_constants(tree, toolbox, X, y):
-    individual, num_consts = compile_individual_with_consts(tree, toolbox)
-
-    if num_consts > 0:
-
-        eval_MSE = partial(compute_MSE, individual=individual, X=X, y=y)
-
-        x0 = np.ones(num_consts)
-
-        class fitting_problem:
-            def fitness(self, x):
-                total_err = eval_MSE(consts=x)
-                # return [total_err + 0.*(np.linalg.norm(x, 2))**2]
-                return [total_err]
-
-            def gradient(self, x):
-                with mem_guard_off:
-                    xt = mg.tensor(x, copy=False)
-                    f = self.fitness(xt)[0]
-                    f.backward()
-                return xt.grad
-
-            def get_bounds(self):
-                return (-5.0 * np.ones(num_consts), 5.0 * np.ones(num_consts))
-
-        # PYGMO SOLVER
-        prb = pg.problem(fitting_problem())
-        algo = pg.algorithm(pg.nlopt(solver="lbfgs"))
-        # algo = pg.algorithm(pg.pso(gen=10))
-        # pop = pg.population(prb, size=70)
-        algo.extract(pg.nlopt).maxeval = 10
-        pop = pg.population(prb, size=1)
-        pop.push_back(x0)
-        pop = algo.evolve(pop)
-        MSE = pop.champion_f[0]
-        consts = pop.champion_x
-
-        if np.isinf(MSE) or np.isnan(MSE):
-            MSE = 1e8
-    else:
-        MSE = compute_MSE(individual, X, y)
-        consts = []
+    # fit the constants with Levenberg-Marquardt, evaluating the tree with the numba
+    # interpreter
+    MSE, consts = fit_mse(tree, toolbox.compile.keywords["pset"], X, y)
+    if np.isinf(MSE) or np.isnan(MSE):
+        MSE = 1e8
     return MSE, consts
-
-
-def predict(individuals_batch, toolbox, X, penalty, fitness_scale):
-
-    predictions = [None] * len(individuals_batch)
-
-    for i, tree in enumerate(individuals_batch):
-        callable, _ = compile_individual_with_consts(tree, toolbox)
-        predictions[i] = eval_model(callable, X, consts=tree.consts)
-
-    return predictions
-
-
-def compute_MSEs(individuals_batch, toolbox, X, y, penalty, fitness_scale):
-
-    total_errs = [None] * len(individuals_batch)
-
-    for i, tree in enumerate(individuals_batch):
-        callable, _ = compile_individual_with_consts(tree, toolbox)
-        total_errs[i] = compute_MSE(callable, X, y, consts=tree.consts)
-
-    return total_errs
 
 
 def compute_attributes(individuals_batch, toolbox, X, y, penalty, fitness_scale):
@@ -192,14 +109,8 @@ def compute_attributes(individuals_batch, toolbox, X, y, penalty, fitness_scale)
     return attributes
 
 
-def assign_attributes(individuals_batch, attributes):
-    for ind, attr in zip(individuals_batch, attributes):
-        ind.consts = attr["consts"]
-        ind.fitness.values = attr["fitness"]
-
-
 def score(individuals_batch, toolbox, X, y, penalty, fitness_scale):
-    predictions = predict(individuals_batch, toolbox, X, penalty, fitness_scale)
+    predictions = predict_batch(individuals_batch, toolbox, X)
     scores = [None] * len(individuals_batch)
     for i, prediction in enumerate(predictions):
         scores[i] = r2_score(y, prediction)
@@ -239,7 +150,7 @@ def optimize(trial, X, y, grid_search_parameters, cfgfile):
     gpsr = gps.GPSymbolicRegressor(
         pset_config=pset,
         fitness=compute_attributes,
-        predict_func=predict,
+        predict_func=predict_batch,
         score_func=score,
         common_data=common_params,
         callback_func=assign_attributes,
