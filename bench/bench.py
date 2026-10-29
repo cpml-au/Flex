@@ -3,7 +3,12 @@ from deap import gp
 
 from flex.gp import regressor as gps
 from flex.gp import numba_eval
-from flex.gp.util import get_features_batch, load_config_data
+from flex.gp.util import (
+    get_features_batch,
+    load_config_data,
+    safe_r2_score,
+    sanitize_array_for_metrics,
+)
 from flex.gp.primitives import add_primitives_to_pset_from_dict
 import numpy as np
 import ray
@@ -13,7 +18,6 @@ import time
 
 import warnings
 
-from sklearn.metrics import r2_score
 from datasets import generate_dataset
 
 import optuna
@@ -22,23 +26,6 @@ import sympy as sp
 # silence numpy warnings (overflow, invalid values) of the evaluated models once,
 # instead of at each model evaluation
 warnings.filterwarnings("ignore")
-
-
-def sanitize_array_for_metrics(arr, name, clip_value=1e150):
-    """Return a finite float64 array suitable for metric computation."""
-    arr = np.asarray(arr, dtype=np.float64).reshape(-1)
-    arr = np.nan_to_num(arr, nan=0.0, posinf=clip_value, neginf=-clip_value)
-    arr = np.clip(arr, -clip_value, clip_value)
-    return arr
-
-
-def safe_r2_score(y_true, y_pred):
-    """Robust R^2 computation that avoids crashing on bad numeric values."""
-    try:
-        return r2_score(y_true, y_pred)
-    except ValueError as exc:
-        print(f"Warning: r2_score failed ({exc}). Returning NaN.")
-        return np.nan
 
 
 def compute_fitness_value(MSE, model_size, penalty):

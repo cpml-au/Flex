@@ -3,6 +3,7 @@ from itertools import chain
 import ray
 import numpy as np
 from deap import gp
+from sklearn.metrics import r2_score
 from flex.gp.cochain_primitives import Dimension, Rank
 
 
@@ -97,6 +98,23 @@ def get_features_batch(individuals_batch):
     individ_length = [len(ind) for ind in individuals_batch]
     nested_trigs, num_trigs = zip(*[trig_features(ind) for ind in individuals_batch])
     return individ_length, nested_trigs, num_trigs
+
+
+def sanitize_array_for_metrics(arr, name, clip_value=1e150):
+    """Return a finite float64 array suitable for metric computation."""
+    arr = np.asarray(arr, dtype=np.float64).reshape(-1)
+    arr = np.nan_to_num(arr, nan=0.0, posinf=clip_value, neginf=-clip_value)
+    arr = np.clip(arr, -clip_value, clip_value)
+    return arr
+
+
+def safe_r2_score(y_true, y_pred):
+    """Robust R^2 computation that avoids crashing on bad numeric values."""
+    try:
+        return r2_score(y_true, y_pred)
+    except ValueError as exc:
+        print(f"Warning: r2_score failed ({exc}). Returning NaN.")
+        return np.nan
 
 
 def mapper(f, individuals, toolbox_ref, batch_size):
