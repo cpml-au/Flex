@@ -27,7 +27,7 @@ gp:
     fun: gp.cxOnePoint
     kargs: "{}"
   scaleXy: True
-  batch_size: 10
+  batch_size: 50
   use_constants: True
   primitives:
     imports:
