@@ -15,6 +15,7 @@ import numpy as np
 import ray
 
 import math
+import random
 import time
 
 import warnings
@@ -99,6 +100,9 @@ def compute_attributes(
 def eval(problem, cfgfile, seed=42, grid_search=False, coarse_grained_islands=False,
          remove_init_duplicates=True, custom_logger=None, multiprocessing=True,
          early_stop_fitness_threshold=1e-12):
+
+    random.seed(seed)
+    np.random.seed(seed)
 
     regressor_params, config_file_data = load_config_data(cfgfile)
 

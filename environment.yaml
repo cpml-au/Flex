@@ -25,7 +25,7 @@ dependencies:
   - pip
   - pip:
       - git+https://github.com/cpml-au/dctkit
-      - git+https://github.com/cpml-au/deap@fa0b033ec6e242a59dc8a8f01ab51b36ff00af89
+      - git+https://github.com/cpml-au/deap@da724f1a9b405bfde12060b85a889c0d18d80d5d
       - "ray[default]"
       - pygmsh
       - tox
