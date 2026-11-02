@@ -22,21 +22,19 @@ single tree, and the batch functions ``fitness_batch``, ``score_batch``,
 ``GPSymbolicRegressor`` as ``fitness``, ``score_func``, ``predict_func`` and
 ``callback_func``.
 
-The compiled functions are cached on disk by numba, which only tracks changes in the
-source file of each function: after changing ``numba_grad`` or ``numba_primitives``,
-delete the ``numba_*.nbi`` and ``numba_*.nbc`` files in ``__pycache__``, otherwise the
-functions of this module keep using the previous code.
+The compiled functions are cached on disk in a folder that depends on the sources of
+the three numba modules (``cached_njit``), so that changing any of them compiles all of
+them again.
 """
 
 import zlib
 
 import numpy as np
 from deap import gp
-from numba import njit
 
 from flex.gp.numba_grad import sse_normal_equations
 from flex.gp.numba_primitives import (
-    ADD, BLOCK, CONST, NUM, OPCODES, VAR, apply_binary, apply_unary,
+    ADD, BLOCK, CONST, NUM, OPCODES, VAR, apply_binary, apply_unary, cached_njit,
 )
 
 
@@ -77,7 +75,7 @@ def encode(tree, arg_names, special_term_name="c"):
     return ops, idx, nums, num_consts
 
 
-@njit(cache=True, error_model="numpy")
+@cached_njit(error_model="numpy")
 def _eval_block(ops, idx, nums, X, consts, start, m, V):
     """Values of the tree at the points start, ..., start + m - 1 in V[0, :m]."""
     sp = 0
@@ -106,7 +104,7 @@ def _eval_block(ops, idx, nums, X, consts, start, m, V):
             sp -= 1
 
 
-@njit(cache=True, error_model="numpy")
+@cached_njit(error_model="numpy")
 def predict(ops, idx, nums, X, consts):
     """Values of the tree on the data X (samples x features)."""
     n = X.shape[0]
@@ -119,7 +117,7 @@ def predict(ops, idx, nums, X, consts):
     return out
 
 
-@njit(cache=True, error_model="numpy")
+@cached_njit(error_model="numpy")
 def sse(ops, idx, nums, X, y, consts):
     """Sum of squared errors of the tree on the data X (samples x features), y."""
     n = X.shape[0]
@@ -136,7 +134,7 @@ def sse(ops, idx, nums, X, y, consts):
 
 
 
-@njit(cache=True)
+@cached_njit()
 def _solve_spd(A, b):
     """Solution of A x = b for a symmetric positive definite A (Cholesky); returns
     False if A is not positive definite."""
@@ -168,7 +166,7 @@ def _solve_spd(A, b):
     return x, True
 
 
-@njit(cache=True, error_model="numpy")
+@cached_njit(error_model="numpy")
 def fit_constants(ops, idx, nums, X, y, x0, lower, upper, max_iter):
     """Fits the constants of the tree by minimizing the sum of squared errors with
     Levenberg-Marquardt (Marquardt scaling of the damping), starting from x0 and

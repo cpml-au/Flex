@@ -1,4 +1,5 @@
 import copy
+import pathlib
 import random
 from functools import partial
 import warnings
@@ -19,7 +20,9 @@ from flex.gp.numba_eval import (
     score_batch,
     sse,
 )
+from flex.gp import numba_primitives
 from flex.gp.numba_grad import sse_normal_equations
+from flex.gp.numba_primitives import _cache_dir, apply_unary
 from flex.gp.numpy_primitives import numpy_primitives
 from flex.gp.primitives import add_primitives_to_pset_from_dict
 from flex.gp.regressor import GPSymbolicRegressor
@@ -525,6 +528,22 @@ def test_derivatives_near_a_pole_and_at_large_arguments():
     X = np.array([[1.0], [40.0]])
     _, JTJ, _ = sse_normal_equations(ops, idx, nums, X, np.zeros(2), np.ones(k))
     assert np.all(np.isfinite(JTJ))
+
+
+def test_numba_cache_depends_on_all_the_sources(tmp_path):
+    sources = ["numba_primitives.py", "numba_grad.py", "numba_eval.py"]
+    for source in sources:
+        (tmp_path / source).write_text(source)
+    folders = {_cache_dir(tmp_path)}
+    for source in sources:
+        (tmp_path / source).write_text(source + "changed")
+        folders.add(_cache_dir(tmp_path))
+    assert len(folders) == 4
+
+    # a function of each module uses the folder of the current sources
+    package_dir = pathlib.Path(numba_primitives.__file__).parent
+    for func in [apply_unary, sse_normal_equations, fit_constants]:
+        assert func._cache.cache_path.startswith(_cache_dir(package_dir))
 
 
 def test_fit_constants():

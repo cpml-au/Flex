@@ -9,28 +9,28 @@ updates a product with a zero factor is zero, also if the other factor is inf or
 the fit of the constants.
 """
 
-from numba import njit
 import numpy as np
 
 from flex.gp.numba_primitives import (
     ADD, ARCCOS, ARCSIN, BLOCK, CONST, COS, DIV, EXP, LOG, MUL, NUM, POW, PROT_LOG,
-    PROT_POW, SIN, SQRT, SQUARE, SUB, VAR, apply_binary, apply_unary, binary, unary,
+    PROT_POW, SIN, SQRT, SQUARE, SUB, VAR, apply_binary, apply_unary, binary,
+    cached_njit, unary,
 )
 
 
-@njit(cache=True, error_model="numpy")
+@cached_njit(error_model="numpy")
 def _product(p, d):
     """p * d, where a zero factor gives zero also if the other factor is inf or nan."""
     return 0.0 if p == 0.0 or d == 0.0 else p * d
 
 
-@njit(cache=True, error_model="numpy")
+@cached_njit(error_model="numpy")
 def _quotient(n, b):
     """n / b, where a zero numerator gives zero also if b is zero or nan."""
     return 0.0 if n == 0.0 else n / b
 
 
-@njit(cache=True, error_model="numpy")
+@cached_njit(error_model="numpy")
 def _unary_derivative(op, a, v):
     """Derivative of the unary primitive at a, given its value v."""
     if op == SIN:
@@ -53,7 +53,7 @@ def _unary_derivative(op, a, v):
         return 1.0 - v * v
 
 
-@njit(cache=True, error_model="numpy")
+@cached_njit(error_model="numpy")
 def _binary_derivatives(op, a, b, v):
     """Partial derivatives of the binary primitive at (a, b), given its value v."""
     if op == ADD:
@@ -81,7 +81,7 @@ def _binary_derivatives(op, a, b, v):
         return 1.0 / s, -v * b / (s * s)
 
 
-@njit(cache=True, error_model="numpy")
+@cached_njit(error_model="numpy")
 def _arithmetic_derivatives(op, a, b, Da, Db, za, zb, k, m):
     """Derivatives (in Db) of op(a, b) for the arithmetic operators, given those of the
     operands (Da, Db; za, zb: whether they are zero), with vectorized loops."""
@@ -127,7 +127,7 @@ def _arithmetic_derivatives(op, a, b, Da, Db, za, zb, k, m):
                     db[i] = _quotient(da[i] - _product(a[i] / b[i], db[i]), b[i])
 
 
-@njit(cache=True, error_model="numpy")
+@cached_njit(error_model="numpy")
 def sse_normal_equations(ops, idx, nums, X, y, consts):
     """Sum of squared errors, J^T J and J^T r, where r = f - y are the residuals and J
     the Jacobian of the tree values f with respect to the constants, computed in

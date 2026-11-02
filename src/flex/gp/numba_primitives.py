@@ -4,7 +4,10 @@ single points (``unary``, ``binary``) and on blocks of points (``apply_unary``,
 and invalid values give inf/nan, as in numpy.
 """
 
-from numba import njit
+import hashlib
+import pathlib
+
+from numba import config, njit
 import numpy as np
 
 # opcodes of the leaves (feature, constant, number), of the unary and of the binary
@@ -21,7 +24,41 @@ OPCODES = {
 BLOCK = 256
 
 
-@njit(cache=True, error_model="numpy")
+def _cache_dir(package_dir):
+    """Folder of the numba cache, named after a hash of the sources of the numba
+    modules.
+
+    Numba only tracks changes in the source file of each compiled function, while the
+    compiled code of a function includes that of the functions it calls, which are in
+    the other modules: with this folder, changing any of the sources compiles all of
+    them again."""
+    sources = ["numba_primitives.py", "numba_grad.py", "numba_eval.py"]
+    digest = hashlib.sha256()
+    for source in sources:
+        digest.update((package_dir / source).read_bytes())
+    base = config.CACHE_DIR or package_dir / "__pycache__"
+    return str(pathlib.Path(base) / f"numba_{digest.hexdigest()[:16]}")
+
+
+_CACHE_DIR = _cache_dir(pathlib.Path(__file__).parent)
+
+
+def cached_njit(**options):
+    """``njit`` with a cache in ``_CACHE_DIR``; numba reads the folder when the function
+    is decorated, so the other numba code in the process is not affected."""
+
+    def decorator(func):
+        previous = config.CACHE_DIR
+        config.CACHE_DIR = _CACHE_DIR
+        try:
+            return njit(cache=True, **options)(func)
+        finally:
+            config.CACHE_DIR = previous
+
+    return decorator
+
+
+@cached_njit(error_model="numpy")
 def unary(op, a):
     if op == SIN:
         return np.sin(a)
@@ -45,7 +82,7 @@ def unary(op, a):
         return np.tanh(a)
 
 
-@njit(cache=True, error_model="numpy")
+@cached_njit(error_model="numpy")
 def binary(op, a, b):
     if op == ADD:
         return a + b
@@ -63,14 +100,14 @@ def binary(op, a, b):
         return a / np.sqrt(1.0 + b * b)
 
 
-@njit(cache=True, error_model="numpy")
+@cached_njit(error_model="numpy")
 def apply_unary(op, a, m):
     """a[:m] = op(a[:m])."""
     for i in range(m):
         a[i] = unary(op, a[i])
 
 
-@njit(cache=True, error_model="numpy")
+@cached_njit(error_model="numpy")
 def apply_binary(op, a, b, m):
     """b[:m] = op(a[:m], b[:m]); the arithmetic operators have their own loops, which
     are vectorized."""
