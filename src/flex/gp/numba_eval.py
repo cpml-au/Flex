@@ -21,6 +21,11 @@ single tree, and the batch functions ``fitness_batch``, ``score_batch``,
 ``predict_batch`` and ``assign_attributes``, which can be passed to
 ``GPSymbolicRegressor`` as ``fitness``, ``score_func``, ``predict_func`` and
 ``callback_func``.
+
+The compiled functions are cached on disk by numba, which only tracks changes in the
+source file of each function: after changing ``numba_grad`` or ``numba_primitives``,
+delete the ``numba_*.nbi`` and ``numba_*.nbc`` files in ``__pycache__``, otherwise the
+functions of this module keep using the previous code.
 """
 
 import zlib

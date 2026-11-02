@@ -1,5 +1,5 @@
-"""Opcodes of the numba-compiled tree interpreter and values of its primitives, on single
-points (``unary``, ``binary``) and on blocks of points (``apply_unary``,
+"""Opcodes of the numba-compiled tree interpreter and values of its primitives, on
+single points (``unary``, ``binary``) and on blocks of points (``apply_unary``,
 ``apply_binary``). The definitions are those of ``numpy_primitives``; division by zero
 and invalid values give inf/nan, as in numpy.
 """

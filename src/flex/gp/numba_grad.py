@@ -3,7 +3,8 @@
 The derivatives are computed in forward mode, in the same pass as the values: each stack
 entry of the interpreter holds the values of a node and their derivatives with respect
 to the constants, updated at each node with the differentiation rules of its primitive
-(``_unary_derivative``, ``_binary_derivatives``, ``_arithmetic_derivatives``).
+(``_unary_derivative``, ``_binary_derivatives``, ``_arithmetic_derivatives``). In these
+updates a product with a zero factor is zero, also if the other factor is inf or nan.
 ``sse_normal_equations`` accumulates from them the terms of the normal equations used by
 the fit of the constants.
 """
@@ -15,6 +16,18 @@ from flex.gp.numba_primitives import (
     ADD, ARCCOS, ARCSIN, BLOCK, CONST, COS, DIV, EXP, LOG, MUL, NUM, POW, PROT_LOG,
     PROT_POW, SIN, SQRT, SQUARE, SUB, VAR, apply_binary, apply_unary, binary, unary,
 )
+
+
+@njit(cache=True, error_model="numpy")
+def _product(p, d):
+    """p * d, where a zero factor gives zero also if the other factor is inf or nan."""
+    return 0.0 if p == 0.0 or d == 0.0 else p * d
+
+
+@njit(cache=True, error_model="numpy")
+def _quotient(n, b):
+    """n / b, where a zero numerator gives zero also if b is zero or nan."""
+    return 0.0 if n == 0.0 else n / b
 
 
 @njit(cache=True, error_model="numpy")
@@ -95,23 +108,23 @@ def _arithmetic_derivatives(op, a, b, Da, Db, za, zb, k, m):
         elif op == MUL:
             if zb:
                 for i in range(m):
-                    db[i] = b[i] * da[i]
+                    db[i] = _product(b[i], da[i])
             elif za:
                 for i in range(m):
-                    db[i] = a[i] * db[i]
+                    db[i] = _product(a[i], db[i])
             else:
                 for i in range(m):
-                    db[i] = b[i] * da[i] + a[i] * db[i]
+                    db[i] = _product(b[i], da[i]) + _product(a[i], db[i])
         else:
             if zb:
                 for i in range(m):
-                    db[i] = da[i] / b[i]
+                    db[i] = _quotient(da[i], b[i])
             elif za:
                 for i in range(m):
-                    db[i] = -a[i] * db[i] / (b[i] * b[i])
+                    db[i] = _quotient(-_product(a[i] / b[i], db[i]), b[i])
             else:
                 for i in range(m):
-                    db[i] = (da[i] - a[i] / b[i] * db[i]) / b[i]
+                    db[i] = _quotient(da[i] - _product(a[i] / b[i], db[i]), b[i])
 
 
 @njit(cache=True, error_model="numpy")
@@ -174,7 +187,7 @@ def sse_normal_equations(ops, idx, nums, X, y, consts):
                     for c in range(k):
                         d = D[sp - 1, c]
                         for i in range(m):
-                            d[i] *= PA[i]
+                            d[i] = _product(d[i], PA[i])
             else:
                 a = V[sp - 1]
                 b = V[sp - 2]
@@ -198,13 +211,13 @@ def sse_normal_equations(ops, idx, nums, X, y, consts):
                         db = D[sp - 2, c]
                         if za:
                             for i in range(m):
-                                db[i] = PB[i] * db[i]
+                                db[i] = _product(PB[i], db[i])
                         elif zb:
                             for i in range(m):
-                                db[i] = PA[i] * da[i]
+                                db[i] = _product(PA[i], da[i])
                         else:
                             for i in range(m):
-                                db[i] = PA[i] * da[i] + PB[i] * db[i]
+                                db[i] = _product(PA[i], da[i]) + _product(PB[i], db[i])
                     for i in range(m):
                         b[i] = W[i]
                     Z[sp - 2] = False
