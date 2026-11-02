@@ -23,6 +23,8 @@ single tree, and the batch functions ``fitness_batch``, ``score_batch``,
 ``callback_func``.
 """
 
+import zlib
+
 import numpy as np
 from deap import gp
 from numba import njit
@@ -206,9 +208,18 @@ def fit_constants(ops, idx, nums, X, y, x0, lower, upper, max_iter):
     return x, f, num_trials, num_jac
 
 
-def fit_mse(tree, pset, X, y, x0=1.0, bounds=(-5.0, 5.0), max_iter=8):
+def _start_constants(ops, idx, nums, num_consts, bounds):
+    """Start values of the fit, uniformly distributed within the bounds. The generator
+    is seeded with a hash of the encoded tree, so that the values depend only on the
+    tree, and not on the process or on the order in which the trees are evaluated."""
+    seed = zlib.crc32(ops.tobytes() + idx.tobytes() + nums.tobytes())
+    return np.random.default_rng(seed).uniform(bounds[0], bounds[1], num_consts)
+
+
+def fit_mse(tree, pset, X, y, bounds=(-5.0, 5.0), max_iter=8):
     """MSE of a tree on the data X (samples x features), y, with its constants fitted
-    by Levenberg-Marquardt (``fit_constants``).
+    by Levenberg-Marquardt (``fit_constants``), starting from random values
+    (``_start_constants``).
 
     Args:
         tree: the individual (DEAP ``PrimitiveTree``), whose constants are the
@@ -216,7 +227,6 @@ def fit_mse(tree, pset, X, y, x0=1.0, bounds=(-5.0, 5.0), max_iter=8):
         pset: the primitive set of the tree; the argument at position i reads the
             column i of ``X``.
         X, y: the data.
-        x0: initial value of all the constants.
         bounds: lower and upper bound of all the constants.
         max_iter: maximum number of iterations of Levenberg-Marquardt.
 
@@ -229,8 +239,9 @@ def fit_mse(tree, pset, X, y, x0=1.0, bounds=(-5.0, 5.0), max_iter=8):
     if num_consts == 0:
         return sse(ops, idx, nums, X, y, np.empty(0)) / len(y), np.empty(0)
     ones = np.ones(num_consts)
+    x0 = _start_constants(ops, idx, nums, num_consts, bounds)
     consts, f, _, _ = fit_constants(
-        ops, idx, nums, X, y, x0 * ones, bounds[0] * ones, bounds[1] * ones, max_iter
+        ops, idx, nums, X, y, x0, bounds[0] * ones, bounds[1] * ones, max_iter
     )
     return f / len(y), consts
 
@@ -258,8 +269,8 @@ def predict_tree(tree, pset, X, consts=()):
 # which the regressor passes to all three functions.
 
 
-def fitness_batch(individuals_batch, toolbox, X, y, x0=1.0, bounds=(-5.0, 5.0),
-                  max_iter=8, parsimony=0.0):
+def fitness_batch(individuals_batch, toolbox, X, y, bounds=(-5.0, 5.0), max_iter=8,
+                  parsimony=0.0):
     """Fitness of each individual: its MSE with the constants fitted by ``fit_mse``
     plus ``parsimony`` times its size (tree length plus number of constants); 1e8 if
     the MSE is not finite.
@@ -271,7 +282,7 @@ def fitness_batch(individuals_batch, toolbox, X, y, x0=1.0, bounds=(-5.0, 5.0),
     pset = toolbox.compile.keywords["pset"]
     attributes = []
     for tree in individuals_batch:
-        MSE, consts = fit_mse(tree, pset, X, y, x0, bounds, max_iter)
+        MSE, consts = fit_mse(tree, pset, X, y, bounds, max_iter)
         if np.isfinite(MSE):
             value = MSE + parsimony * (len(tree) + len(consts))
         else:

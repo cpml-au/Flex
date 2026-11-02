@@ -194,9 +194,12 @@ with their values and are not fitted.
 Per-tree functions, to be called inside your own fitness, score and predict functions
 (`pset` is the primitive set; its i-th argument reads the i-th column of `X`):
 
-- `fit_mse(tree, pset, X, y, x0=1.0, bounds=(-5.0, 5.0), max_iter=8)` fits the
-  constants, starting from `x0` and keeping them within `bounds`, and returns the MSE
-  and the fitted constants;
+- `fit_mse(tree, pset, X, y, bounds=(-5.0, 5.0), max_iter=8)` fits the constants,
+  keeping them within `bounds`, and returns the MSE and the fitted constants. The fit
+  starts from random values, uniformly distributed within `bounds`, whose generator is
+  seeded with a hash of the tree: a given tree always starts from the same values, in
+  serial and in parallel runs. If a derivative is not finite at some data point, the fit
+  stops and returns the constants reached so far;
 - `mse(tree, pset, X, y, consts)` returns the MSE of the tree with the given constants;
 - `predict_tree(tree, pset, X, consts)` returns the values of the tree with the given
   constants.
@@ -213,8 +216,8 @@ Ready-made batch functions, to be passed directly to `GPSymbolicRegressor`:
   better model, `score_batch` is suited to the `score` method but not to validation
   (`validate=True`), which requires a score where higher is better.
 
-The options `x0`, `bounds`, `max_iter` and `parsimony` of `fitness_batch` are set
-through `common_data`:
+The options `bounds`, `max_iter` and `parsimony` of `fitness_batch` are set through
+`common_data`:
 
 ```python
 from flex.gp.numba_eval import (
@@ -233,6 +236,22 @@ gpsr = GPSymbolicRegressor(
     # ...
 )
 ```
+
+Two cases in which the fit behaves differently from what the exact derivatives might
+suggest:
+
+- The chain rule multiplies the derivative of a primitive by the derivative of its
+  operand. If the first is infinite and the second is zero, their product is `nan`, even
+  when the true derivative of the tree exists, and the fit stops. For example, the
+  derivative of `sqrt(mul(c, x))` with respect to `c` is 0 at `x = 0`, because the tree
+  is 0 there for every `c`, but it is computed as `nan`: a data point at `x = 0` stops
+  the fit of this tree before its first step.
+- At a zero base, `pow(a, b)` with `b >= 1` uses the derivative from the right,
+  `b * 0^(b - 1)`, also when `b` is not an integer and `a^b` is not a real number for
+  negative `a`. For example, `pow(sub(x, c), 1.5)` at `x = c` has a finite derivative and
+  the fit continues, even if the tree is not finite for larger `c`. A step to constants
+  at which the tree is not finite on the data is rejected, because it does not reduce the
+  error.
 
 The complete script is `examples/simple_sr_numba.py`.
 

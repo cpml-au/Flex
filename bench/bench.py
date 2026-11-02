@@ -37,8 +37,8 @@ def compute_fitness_value(MSE, model_size, penalty):
 
 def eval_MSE_and_fit_constants_numba(tree, toolbox, X, y):
     """MSE of the tree with its constants fitted by Levenberg-Marquardt (at most 8
-    iterations, constants in [-5, 5] starting from 1), with the tree evaluated by the
-    numba interpreter."""
+    iterations, constants in [-5, 5] starting from random values), with the tree
+    evaluated by the numba interpreter."""
     MSE, consts = numba_eval.fit_mse(tree, toolbox.compile.keywords["pset"], X, y)
     if not math.isfinite(MSE):
         MSE = 1e8

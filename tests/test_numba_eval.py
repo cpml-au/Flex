@@ -6,6 +6,7 @@ import warnings
 import numpy as np
 from deap import base, gp
 from flex.gp.numba_eval import (
+    _start_constants,
     assign_attributes,
     encode,
     fit_constants,
@@ -310,6 +311,37 @@ def test_tree_helpers():
     MSE, consts = fit_mse(tree, pset, X, y)
     assert len(consts) == 0
     assert np.isclose(MSE, np.mean((np.sin(X[:, 0]) - y) ** 2))
+
+
+def test_random_start_of_the_fit():
+    pset, _ = make_pset(1)
+    pset.addTerminal(2.0, float)
+    pset.addTerminal(3.0, float)
+    X = np.linspace(0.5, 1.5, 20).reshape(-1, 1)
+    y = X[:, 0] / 2.0
+
+    def start(expr):
+        tree = gp.PrimitiveTree.from_string(expr, pset)
+        ops, idx, nums, k = encode(tree, pset.arguments)
+        return _start_constants(ops, idx, nums, k, (-5.0, 5.0))
+
+    # within the bounds, different for each constant, and the same at each call
+    x0 = start("add(c, mul(c, add(c, x)))")
+    assert np.all(np.abs(x0) <= 5.0) and len(set(x0)) == 3
+    assert np.array_equal(x0, start("add(c, mul(c, add(c, x)))"))
+    # different trees start from different values, also if only a number differs
+    assert not np.array_equal(start("add(c, 2.0)"), start("add(c, 3.0)"))
+
+    tree = gp.PrimitiveTree.from_string("add(c, mul(c, add(c, x)))", pset)
+    MSE, consts = fit_mse(tree, pset, X, y)
+    MSE_again, consts_again = fit_mse(tree, pset, X, y)
+    assert MSE == MSE_again and np.array_equal(consts, consts_again)
+
+    # with equal start values c - c is zero and the tree is not finite on the data
+    tree = gp.PrimitiveTree.from_string("div(x, sub(c, c))", pset)
+    ops, idx, nums, k = encode(tree, pset.arguments)
+    assert not np.isfinite(sse(ops, idx, nums, X, y, np.ones(k)))
+    assert np.isfinite(fit_mse(tree, pset, X, y)[0])
 
 
 def test_regressor_with_batch_functions():
