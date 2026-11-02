@@ -10,11 +10,10 @@ dispatched once per node and block, and the loop over the points of a block can 
 vectorized by the compiler.
 
 The derivatives of the tree with respect to its constants are computed exactly in the
-same pass (forward mode): each stack entry holds the values of a node and their
-derivatives with respect to the constants. They are used to fit the constants by
-minimizing the sum of squared errors with Levenberg-Marquardt (``fit_constants``).
+same pass (``numba_grad``). They are used to fit the constants by minimizing the sum of
+squared errors with Levenberg-Marquardt (``fit_constants``).
 
-The supported primitives are those of ``numpy_primitives`` (same definitions);
+The supported primitives are those of ``numpy_primitives`` (``numba_primitives``);
 division by zero and invalid values give inf/nan, as in numpy.
 
 User-facing helpers work on DEAP trees: ``fit_mse``, ``mse`` and ``predict_tree`` for a
@@ -28,18 +27,10 @@ import numpy as np
 from deap import gp
 from numba import njit
 
-# opcodes of the leaves (feature, constant, number), of the unary and of the binary
-# primitives
-VAR, CONST, NUM = 0, 1, 2
-SIN, ARCSIN, COS, ARCCOS, EXP, LOG, PROT_LOG, SQRT, SQUARE, TANH = range(3, 13)
-ADD, SUB, MUL, DIV, POW, PROT_POW, AQ = range(13, 20)
-OPCODES = {
-    "sin": SIN, "arcsin": ARCSIN, "cos": COS, "arccos": ARCCOS, "exp": EXP,
-    "log": LOG, "prot_log": PROT_LOG, "sqrt": SQRT, "square": SQUARE, "tanh": TANH,
-    "add": ADD, "sub": SUB, "mul": MUL, "div": DIV, "pow": POW, "prot_pow": PROT_POW,
-    "aq": AQ,
-}
-BLOCK = 256
+from flex.gp.numba_grad import sse_normal_equations
+from flex.gp.numba_primitives import (
+    ADD, BLOCK, CONST, NUM, OPCODES, VAR, apply_binary, apply_unary,
+)
 
 
 def encode(tree, arg_names, special_term_name="c"):
@@ -80,119 +71,6 @@ def encode(tree, arg_names, special_term_name="c"):
 
 
 @njit(cache=True, error_model="numpy")
-def _unary(op, a):
-    if op == SIN:
-        return np.sin(a)
-    elif op == ARCSIN:
-        return np.arcsin(a)
-    elif op == COS:
-        return np.cos(a)
-    elif op == ARCCOS:
-        return np.arccos(a)
-    elif op == EXP:
-        return np.exp(a)
-    elif op == LOG:
-        return np.log(a)
-    elif op == PROT_LOG:
-        return np.log(np.abs(a))
-    elif op == SQRT:
-        return np.sqrt(a)
-    elif op == SQUARE:
-        return a * a
-    else:
-        return np.tanh(a)
-
-
-@njit(cache=True, error_model="numpy")
-def _unary_derivative(op, a, v):
-    """Derivative of the unary primitive at a, given its value v."""
-    if op == SIN:
-        return np.cos(a)
-    elif op == ARCSIN:
-        return 1.0 / np.sqrt(1.0 - a * a)
-    elif op == COS:
-        return -np.sin(a)
-    elif op == ARCCOS:
-        return -1.0 / np.sqrt(1.0 - a * a)
-    elif op == EXP:
-        return v
-    elif op == LOG or op == PROT_LOG:
-        return 1.0 / a
-    elif op == SQRT:
-        return 0.5 / v
-    elif op == SQUARE:
-        return 2.0 * a
-    else:
-        return 1.0 - v * v
-
-
-@njit(cache=True, error_model="numpy")
-def _binary(op, a, b):
-    if op == ADD:
-        return a + b
-    elif op == SUB:
-        return a - b
-    elif op == MUL:
-        return a * b
-    elif op == DIV:
-        return a / b
-    elif op == POW:
-        return a**b
-    elif op == PROT_POW:
-        return np.abs(a) ** b
-    else:
-        return a / np.sqrt(1.0 + b * b)
-
-
-@njit(cache=True, error_model="numpy")
-def _binary_derivatives(op, a, b, v):
-    """Partial derivatives of the binary primitive at (a, b), given its value v."""
-    if op == ADD:
-        return 1.0, 1.0
-    elif op == SUB:
-        return 1.0, -1.0
-    elif op == MUL:
-        return b, a
-    elif op == DIV:
-        return 1.0 / b, -v / b
-    elif op == POW:
-        return b * v / a, v * np.log(a)
-    elif op == PROT_POW:
-        return b * v / a, v * np.log(np.abs(a))
-    else:
-        s = np.sqrt(1.0 + b * b)
-        return 1.0 / s, -v * b / (s * s)
-
-
-@njit(cache=True, error_model="numpy")
-def _apply_unary(op, a, m):
-    """a[:m] = op(a[:m])."""
-    for i in range(m):
-        a[i] = _unary(op, a[i])
-
-
-@njit(cache=True, error_model="numpy")
-def _apply_binary(op, a, b, m):
-    """b[:m] = op(a[:m], b[:m]); the arithmetic operators have their own loops, which
-    are vectorized."""
-    if op == ADD:
-        for i in range(m):
-            b[i] = a[i] + b[i]
-    elif op == SUB:
-        for i in range(m):
-            b[i] = a[i] - b[i]
-    elif op == MUL:
-        for i in range(m):
-            b[i] = a[i] * b[i]
-    elif op == DIV:
-        for i in range(m):
-            b[i] = a[i] / b[i]
-    else:
-        for i in range(m):
-            b[i] = _binary(op, a[i], b[i])
-
-
-@njit(cache=True, error_model="numpy")
 def _eval_block(ops, idx, nums, X, consts, start, m, V):
     """Values of the tree at the points start, ..., start + m - 1 in V[0, :m]."""
     sp = 0
@@ -214,10 +92,10 @@ def _eval_block(ops, idx, nums, X, consts, start, m, V):
                 V[sp, i] = v
             sp += 1
         elif op < ADD:
-            _apply_unary(op, V[sp - 1], m)
+            apply_unary(op, V[sp - 1], m)
         else:
             # first operand on top of the stack, result in the slot of the second
-            _apply_binary(op, V[sp - 1], V[sp - 2], m)
+            apply_binary(op, V[sp - 1], V[sp - 2], m)
             sp -= 1
 
 
@@ -249,168 +127,6 @@ def sse(ops, idx, nums, X, y, consts):
     return total
 
 
-@njit(cache=True, error_model="numpy")
-def _arithmetic_derivatives(op, a, b, Da, Db, za, zb, k, m):
-    """Derivatives (in Db) of op(a, b) for the arithmetic operators, given those of the
-    operands (Da, Db; za, zb: whether they are zero), with vectorized loops."""
-    for c in range(k):
-        da = Da[c]
-        db = Db[c]
-        if op == ADD:
-            if zb:
-                for i in range(m):
-                    db[i] = da[i]
-            elif not za:
-                for i in range(m):
-                    db[i] = da[i] + db[i]
-        elif op == SUB:
-            if zb:
-                for i in range(m):
-                    db[i] = da[i]
-            elif za:
-                for i in range(m):
-                    db[i] = -db[i]
-            else:
-                for i in range(m):
-                    db[i] = da[i] - db[i]
-        elif op == MUL:
-            if zb:
-                for i in range(m):
-                    db[i] = b[i] * da[i]
-            elif za:
-                for i in range(m):
-                    db[i] = a[i] * db[i]
-            else:
-                for i in range(m):
-                    db[i] = b[i] * da[i] + a[i] * db[i]
-        else:
-            if zb:
-                for i in range(m):
-                    db[i] = da[i] / b[i]
-            elif za:
-                for i in range(m):
-                    db[i] = -a[i] * db[i] / (b[i] * b[i])
-            else:
-                for i in range(m):
-                    db[i] = (da[i] - a[i] / b[i] * db[i]) / b[i]
-
-
-@njit(cache=True, error_model="numpy")
-def sse_normal_equations(ops, idx, nums, X, y, consts):
-    """Sum of squared errors, J^T J and J^T r, where r = f - y are the residuals and J
-    the Jacobian of the tree values f with respect to the constants, computed in
-    forward mode (the n x k Jacobian is not stored).
-
-    For each node and block, the partial derivatives of the primitive are computed
-    first, and then the derivatives with respect to each constant are updated with a
-    vectorized loop. Subtrees without constants (zero derivatives) are skipped."""
-    n = X.shape[0]
-    k = len(consts)
-    V = np.empty((len(ops), BLOCK))
-    D = np.empty((len(ops), k, BLOCK))
-    # whether the derivatives of a stack entry are all zero
-    Z = np.empty(len(ops), dtype=np.bool_)
-    PA = np.empty(BLOCK)
-    PB = np.empty(BLOCK)
-    W = np.empty(BLOCK)
-    total = 0.0
-    JTJ = np.zeros((k, k))
-    JTr = np.zeros(k)
-    for start in range(0, n, BLOCK):
-        m = min(BLOCK, n - start)
-        sp = 0
-        for j in range(len(ops) - 1, -1, -1):
-            op = ops[j]
-            if op == VAR:
-                f = idx[j]
-                for i in range(m):
-                    V[sp, i] = X[start + i, f]
-                Z[sp] = True
-                sp += 1
-            elif op == CONST:
-                v = consts[idx[j]]
-                for i in range(m):
-                    V[sp, i] = v
-                for c in range(k):
-                    w = 1.0 if c == idx[j] else 0.0
-                    for i in range(m):
-                        D[sp, c, i] = w
-                Z[sp] = False
-                sp += 1
-            elif op == NUM:
-                v = nums[j]
-                for i in range(m):
-                    V[sp, i] = v
-                Z[sp] = True
-                sp += 1
-            elif op < ADD:
-                a = V[sp - 1]
-                if Z[sp - 1]:
-                    _apply_unary(op, a, m)
-                else:
-                    for i in range(m):
-                        v = _unary(op, a[i])
-                        PA[i] = _unary_derivative(op, a[i], v)
-                        a[i] = v
-                    for c in range(k):
-                        d = D[sp - 1, c]
-                        for i in range(m):
-                            d[i] *= PA[i]
-            else:
-                a = V[sp - 1]
-                b = V[sp - 2]
-                za = Z[sp - 1]
-                zb = Z[sp - 2]
-                if za and zb:
-                    _apply_binary(op, a, b, m)
-                elif op <= DIV:
-                    Da, Db = D[sp - 1], D[sp - 2]
-                    _arithmetic_derivatives(op, a, b, Da, Db, za, zb, k, m)
-                    _apply_binary(op, a, b, m)
-                    Z[sp - 2] = False
-                else:
-                    # partial derivatives at the operands, then values (in W)
-                    for i in range(m):
-                        v = _binary(op, a[i], b[i])
-                        PA[i], PB[i] = _binary_derivatives(op, a[i], b[i], v)
-                        W[i] = v
-                    for c in range(k):
-                        da = D[sp - 1, c]
-                        db = D[sp - 2, c]
-                        if za:
-                            for i in range(m):
-                                db[i] = PB[i] * db[i]
-                        elif zb:
-                            for i in range(m):
-                                db[i] = PA[i] * da[i]
-                        else:
-                            for i in range(m):
-                                db[i] = PA[i] * da[i] + PB[i] * db[i]
-                    for i in range(m):
-                        b[i] = W[i]
-                    Z[sp - 2] = False
-                sp -= 1
-        # residuals (in W) and their products with the derivatives
-        for i in range(m):
-            W[i] = V[0, i] - y[start + i]
-            total += W[i] * W[i]
-        if not Z[0]:
-            for c in range(k):
-                dc = D[0, c]
-                s = 0.0
-                for i in range(m):
-                    s += dc[i] * W[i]
-                JTr[c] += s
-                for e in range(c + 1):
-                    de = D[0, e]
-                    s = 0.0
-                    for i in range(m):
-                        s += dc[i] * de[i]
-                    JTJ[c, e] += s
-    for c in range(k):
-        for e in range(c):
-            JTJ[e, c] = JTJ[c, e]
-    return total, JTJ, JTr
 
 
 @njit(cache=True)

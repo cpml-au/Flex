@@ -17,8 +17,8 @@ from flex.gp.numba_eval import (
     predict_tree,
     score_batch,
     sse,
-    sse_normal_equations,
 )
+from flex.gp.numba_grad import sse_normal_equations
 from flex.gp.numpy_primitives import numpy_primitives
 from flex.gp.primitives import add_primitives_to_pset_from_dict
 from flex.gp.regressor import GPSymbolicRegressor
@@ -173,6 +173,109 @@ def test_normal_equations_random_trees():
         assert np.allclose(JTJ, J.T @ J, rtol=1e-5, atol=1e-5 * scale)
         num_checked += 1
     assert num_checked > 200
+
+
+def test_pow_derivatives_at_zero_base():
+    # at a = 0 the derivatives of a^b and |a|^b exist for these exponents, although the
+    # general formulas b * v / a and v * log(a) are not defined there
+    pset, _ = make_pset(1)
+    for number in [0.0, 1.0, 2.0]:
+        pset.addTerminal(number, float)
+    x = np.array([-1.0, 0.0, 1.0, 2.0, 3.0])
+    x_nonneg = x[1:]
+    c = 1.5
+    p = 2.0
+    cases = [
+        ("pow(mul(c, x), 2.0)", [c], x, lambda x: np.c_[2 * c * x**2]),
+        ("prot_pow(mul(c, x), 2.0)", [c], x, lambda x: np.c_[2 * c * x**2]),
+        ("pow(mul(c, x), 1.0)", [c], x, lambda x: np.c_[x]),
+        ("pow(mul(c, x), 0.0)", [c], x, lambda x: np.c_[0 * x]),
+        ("prot_pow(mul(c, x), 0.0)", [c], x, lambda x: np.c_[0 * x]),
+        (
+            "mul(c, pow(x, c))",
+            [c, p],
+            x_nonneg,
+            lambda x: np.c_[x**p, c * x**p * np.log(np.where(x > 0, x, 1.0))],
+        ),
+        (
+            "mul(c, prot_pow(x, c))",
+            [c, p],
+            x,
+            lambda x: np.c_[
+                np.abs(x) ** p,
+                c * np.abs(x) ** p * np.log(np.where(x != 0, np.abs(x), 1.0)),
+            ],
+        ),
+    ]
+    for expr, consts, x_case, jacobian in cases:
+        X = x_case.reshape(-1, 1)
+        consts = np.array(consts)
+        tree = gp.PrimitiveTree.from_string(expr, pset)
+        ops, idx, nums, _ = encode(tree, pset.arguments)
+        y = np.linspace(-1.0, 1.0, len(X))
+        f, JTJ, JTr = sse_normal_equations(ops, idx, nums, X, y, consts)
+        J = jacobian(x_case)
+        r = predict(ops, idx, nums, X, consts) - y
+        assert np.isclose(f, r @ r), expr
+        assert np.allclose(JTJ, J.T @ J), expr
+        assert np.allclose(JTr, J.T @ r), expr
+
+
+def test_fit_with_pow_at_zero_base():
+    # a data point at x = 0 used to stop these fits before their first step
+    pset, _ = make_pset(1)
+    pset.addTerminal(2.0, float)
+    X = np.array([[0.0], [1.0], [2.0], [3.0], [4.0]])
+    for expr in [
+        "pow(mul(c, x), 2.0)",
+        "prot_pow(mul(c, x), 2.0)",
+        "mul(c, pow(x, c))",
+        "mul(c, prot_pow(x, c))",
+    ]:
+        tree = gp.PrimitiveTree.from_string(expr, pset)
+        ops, idx, nums, k = encode(tree, pset.arguments)
+        ones = np.ones(k)
+        y = predict(ops, idx, nums, X, 2.0 * ones)
+        consts, f, num_trials, _ = fit_constants(
+            ops, idx, nums, X, y, ones, -5.0 * ones, 5.0 * ones, 30
+        )
+        assert num_trials > 0, expr
+        assert np.allclose(consts, 2.0 * ones), expr
+        assert f < 1e-20, expr
+
+
+def test_fit_stops_at_singular_points():
+    # where a derivative is not finite the fit returns the constants reached so far, here
+    # the starting ones, with their (finite) sum of squared errors
+    pset, _ = make_pset(1)
+    for number in [0.5, 1.0]:
+        pset.addTerminal(number, float)
+    cases = [
+        # the derivative is infinite or does not exist at x = c = 1
+        ("sqrt(sub(x, c))", 1.0, [1.0, 2.0, 3.0]),
+        ("arcsin(div(x, c))", 1.0, [0.0, 0.5, 1.0]),
+        ("pow(sub(x, c), 0.5)", 1.0, [1.0, 2.0, 3.0]),
+        ("prot_pow(sub(x, c), 1.0)", 1.0, [1.0, 2.0, 3.0]),
+        # 0^c is discontinuous at c = 0
+        ("pow(x, c)", 0.0, [0.0, 1.0, 2.0]),
+        # the true derivative is 0 at x = 0, but the chain rule gives 0 * inf = nan
+        ("sqrt(mul(c, x))", 1.0, [0.0, 1.0, 2.0]),
+    ]
+    for expr, c, x in cases:
+        X = np.array(x).reshape(-1, 1)
+        tree = gp.PrimitiveTree.from_string(expr, pset)
+        ops, idx, nums, k = encode(tree, pset.arguments)
+        x0 = np.full(k, c)
+        y = predict(ops, idx, nums, X, x0) + 1.0
+        f0 = sse(ops, idx, nums, X, y, x0)
+        _, JTJ, _ = sse_normal_equations(ops, idx, nums, X, y, x0)
+        assert not np.all(np.isfinite(JTJ)), expr
+        consts, f, num_trials, num_jac = fit_constants(
+            ops, idx, nums, X, y, x0, -5.0 * np.ones(k), 5.0 * np.ones(k), 8
+        )
+        assert np.array_equal(consts, x0), expr
+        assert f == f0 and np.isfinite(f), expr
+        assert num_trials == 0 and num_jac == 1, expr
 
 
 def test_fit_constants():
