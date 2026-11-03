@@ -1,8 +1,8 @@
 gp:
-  num_individuals: 700 # 1000
+  num_individuals: 1050 # 1000
   generations: 200 # 200
   multi_island:
-    num_islands: 12 # 15
+    num_islands: 8 # 15
     migration: { "freq": 5, "frac": 0.05 }
   crossover_prob: 0.7
   mut_prob: 0.3

@@ -97,7 +97,7 @@ def compute_attributes(
     return attributes
 
 
-def eval(problem, cfgfile, seed=42, grid_search=False, coarse_grained_islands=False,
+def eval(problem, cfgfile, seed=42, grid_search=False, coarse_grained_islands=True,
          remove_init_duplicates=True, custom_logger=None, multiprocessing=True,
          early_stop_fitness_threshold=1e-12):
 
@@ -292,6 +292,9 @@ if __name__ == "__main__":
         for h in header:
             f.write(h)
             f.write("\n" if h == header[-1] else ";")
+
+    # starting Ray can draw from random, so it happens before the seeding in eval
+    ray.init()
 
     for i, seed in enumerate(seeds):
         print("PROBLEM: ", problem)
