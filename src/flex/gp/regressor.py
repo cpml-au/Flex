@@ -10,6 +10,7 @@ import ray
 import random
 from numbers import Integral
 from flex.gp.util import mapper, max_func, min_func, avg_func, std_func, fitness_value
+from flex.gp.islands import evolve_island, pack_individual, unpack_individual
 from flex.gp.sympy import stringify_for_sympy
 from flex.gp.numpy_primitives import conversion_rules
 from sklearn.base import BaseEstimator, RegressorMixin
@@ -31,227 +32,6 @@ os.environ["NUM_INTRA_THREADS"] = "1"
 os.environ["XLA_FLAGS"] = (
     "--xla_cpu_multi_thread_eigen=false " "intra_op_parallelism_threads=1"
 )
-
-
-def _register_creator_classes():
-    """Create the DEAP ``creator`` classes used for individuals.
-
-    These classes must exist in every process that constructs individuals. In the
-    hybrid island strategy the Ray workers reconstruct individuals from their
-    string representation (see ``_unpack_individual``) using ``creator.Individual``;
-    importing this module on a worker triggers this registration, so the class is
-    available before any island is evolved. The classes are configuration-independent
-    (the primitive set is supplied to ``compile`` via the toolbox, not baked into the
-    class), so creating them eagerly at import time is safe and idempotent.
-    """
-    if not hasattr(creator, "FitnessMin"):
-        creator.create("FitnessMin", base.Fitness, weights=(-1.0,))
-    if not hasattr(creator, "Individual"):
-        creator.create("Individual", gp.PrimitiveTree, fitness=creator.FitnessMin)
-
-
-# Register the creator classes eagerly at import time (driver and Ray workers alike).
-_register_creator_classes()
-
-
-def _island_one_generation(
-    pop: List,
-    toolbox: base.Toolbox,
-    evaluate_fn: Callable,
-    callback_func: Callable | None,
-    params: Dict,
-):
-    """Evolve a single island by one generation.
-
-    This mirrors the per-island body of ``GPSymbolicRegressor.__evolve_islands``
-    but is agnostic about *how* fitness is computed: ``evaluate_fn`` maps the list
-    of invalid individuals to their per-individual results. In the hybrid
-    island-parallel strategy this body runs on a per-island coordinator worker and
-    ``evaluate_fn`` fans the fitness batch out across the cluster. It is the
-    building block of ``_evolve_island_hybrid``.
-
-    Args:
-        pop: the island population (a list of individuals).
-        toolbox: the DEAP toolbox (selection/variation/compile registered).
-        evaluate_fn: callable mapping ``invalid_inds`` to a list of per-individual
-            results, aligned with ``invalid_inds``.
-        callback_func: optional callback used to assign fitness/attributes.
-        params: dictionary of evolution parameters.
-
-    Returns:
-        a tuple ``(pop, num_evals)`` with the evolved population and the number of
-        fitness evaluations performed.
-    """
-    num_individuals = params["num_individuals"]
-    n_elitist = params["n_elitist"]
-    variation = params["variation_mechanism"]
-    crossover_prob = params["crossover_prob"]
-    mut_prob = params["mut_prob"]
-    overlapping = params["overlapping_generation"]
-
-    # Select the parents and clone them to form the offspring
-    offspring = list(map(toolbox.clone, toolbox.select(pop)))
-
-    # Elitism + variation
-    elite_inds = tools.selBest(offspring, n_elitist)
-    if variation == "varand":
-        varied_offspring = algorithms.varAnd(
-            offspring[: num_individuals - n_elitist],
-            toolbox,
-            crossover_prob,
-            mut_prob,
-        )
-    elif variation == "varor":
-        varied_offspring = algorithms.varOr(
-            offspring,
-            toolbox,
-            num_individuals - n_elitist,
-            crossover_prob,
-            mut_prob,
-        )
-    else:
-        raise ValueError(
-            "variation_mechanism must be either 'varAnd' or 'varOr'. "
-            f"Got: {variation}"
-        )
-    offspring = elite_inds + varied_offspring
-
-    invalid_inds = [ind for ind in offspring if not ind.fitness.valid]
-    for ind in invalid_inds:
-        ind._newborn = True
-
-    # Evaluate the fitness of the invalid offspring via the supplied mapper.
-    results = evaluate_fn(invalid_inds)
-    if callback_func is not None:
-        callback_func(invalid_inds, results)
-    else:
-        for ind, fit in zip(invalid_inds, results):
-            ind.fitness.values = fit
-
-    # Survival selection
-    if not overlapping:
-        pop[:] = offspring
-    else:
-        pop = tools.selBest(pop + offspring, num_individuals)
-
-    # Update individual ages after survival
-    for ind in pop:
-        if getattr(ind, "_newborn", False):
-            ind.age = 0
-        else:
-            ind.age = getattr(ind, "age", 0) + 1
-        if hasattr(ind, "_newborn"):
-            delattr(ind, "_newborn")
-
-    return pop, len(invalid_inds)
-
-
-def _pack_individual(ind):
-    """Serialize an individual into a transport-safe, ``creator``-free payload.
-
-    Individuals are *not* shipped across the Ray boundary as ``creator.Individual``
-    instances: cloudpickle reconstructs DEAP's dynamically-created classes in a way
-    that is incompatible with its ``MetaCreator`` metaclass (raising a metaclass
-    conflict), and the behaviour is fragile across repeated round-trips. Instead each
-    individual is reduced to its list of nodes (plain ``deap.gp`` ``Primitive``/
-    ``Terminal`` objects, which pickle cleanly by reference), its fitness values (or
-    ``None`` if not yet evaluated), and any plain instance attributes (e.g. ``age``,
-    ``consts``). The ``fitness`` object itself is excluded because it is a
-    ``creator``-derived class; only its raw values are transferred.
-
-    Returns:
-        a tuple ``(nodes, fitness_values, attrs)``.
-    """
-    fitness_values = ind.fitness.values if ind.fitness.valid else None
-    attrs = {key: value for key, value in vars(ind).items() if key != "fitness"}
-    return (list(ind), fitness_values, attrs)
-
-
-def _unpack_individual(packed):
-    """Reconstruct an individual from a payload produced by ``_pack_individual``.
-
-    Args:
-        packed: a ``(nodes, fitness_values, attrs)`` tuple.
-
-    Returns:
-        a ``creator.Individual`` with its fitness and attributes restored.
-    """
-    nodes, fitness_values, attrs = packed
-    ind = creator.Individual(nodes)
-    if fitness_values is not None:
-        ind.fitness.values = fitness_values
-    for key, value in attrs.items():
-        setattr(ind, key, value)
-    return ind
-
-
-def _evolve_island_hybrid(
-    packed_pop: List,
-    toolbox_ref_box: List,
-    fitness_func: Callable,
-    fitness_args: Dict,
-    callback_func: Callable | None,
-    n_gens: int,
-    params: Dict,
-    batch_size: int,
-    num_cpus: int,
-    max_calls: int,
-):
-    """Evolve a single island for ``n_gens`` generations with *nested* parallelism.
-
-    The variation operators and the generational loop run on this (coordinator)
-    worker, so islands evolve asynchronously with no per-generation global barrier.
-    The per-generation fitness batch is *not* evaluated in-process: it is fanned out
-    across the Ray cluster via the shared ``mapper``, exactly as the fine-grained
-    strategy does. This lets a handful of islands saturate a many-core machine (each
-    island feeds the global fitness queue) instead of being capped at one core per
-    island.
-
-    The coordinator itself is launched at ``num_cpus=0`` (see
-    ``__evolve_hybrid_islands``) so that, while it blocks on its sub-tasks, it does
-    not hold a core that a fitness task could use.
-
-    Args:
-        packed_pop: the island population as ``creator``-free payloads.
-        toolbox_ref_box: a one-element list wrapping the ``ray.ObjectRef`` of the lean
-            toolbox. It is wrapped so Ray does not auto-dereference it: the coordinator
-            needs the concrete toolbox for variation *and* the ref itself to forward to
-            the fitness sub-tasks.
-        fitness_func: the plain (non-remote) fitness function; wrapped as a Ray task
-            here so each batch runs on its own worker.
-        fitness_args: keyword arguments for ``fitness_func``; values may be
-            ``ray.ObjectRef`` (shared datasets), forwarded to the sub-tasks as-is.
-        callback_func: optional callback used to assign fitness/attributes.
-        n_gens: number of generations to evolve before returning to the driver.
-        params: dictionary of evolution parameters.
-        batch_size: batch size used by the ``mapper`` for fitness sub-tasks.
-        num_cpus: CPUs requested per fitness sub-task.
-        max_calls: max calls per Ray worker for fitness sub-tasks.
-
-    Returns:
-        a tuple ``(packed_pop, num_evals)``.
-    """
-    toolbox_ref = toolbox_ref_box[0]
-    toolbox = ray.get(toolbox_ref)
-    remote_fitness = ray.remote(num_cpus=num_cpus, max_calls=max_calls)(fitness_func)
-    # bind the (possibly ObjectRef) data arguments; Ray dereferences them per call
-    eval_remote = partial(remote_fitness.remote, **fitness_args)
-
-    def evaluate_fn(invalid_inds):
-        # fan the fitness batch out across the cluster (global load balancing)
-        return mapper(eval_remote, invalid_inds, toolbox_ref, batch_size)
-
-    pop = [_unpack_individual(p) for p in packed_pop]
-    num_evals = 0
-    for _ in range(n_gens):
-        pop, evals = _island_one_generation(
-            pop, toolbox, evaluate_fn, callback_func, params
-        )
-        num_evals += evals
-    return [_pack_individual(ind) for ind in pop], num_evals
-
-
-_evolve_island_hybrid_remote = ray.remote(_evolve_island_hybrid)
 
 
 class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
@@ -315,7 +95,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
           execute. It must accept an individual and the toolbox as its first two
           arguments; `func_args`: a dictionary of additional arguments for
           func; `callback`: a function used to assign the resulting preprocessed
-          values back to each individual. Not supported when hybrid island
+          values back to each individual. Not supported when coarse-grained island
           evolution is active; use ``coarse_grained_islands=False`` instead.
         callback_func: function called after fitness evaluation to perform custom
             processing.
@@ -328,44 +108,40 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         save_train_fit_history: whether to save the training fitness history.
         save_detailed_log: whether to save population snapshots with each
             individual string, size, fitness, and island index. Includes the initial
-            population; hybrid evolution records subsequent snapshots at block
+            population; coarse-grained evolution records subsequent snapshots at block
             boundaries rather than every generation.
         detailed_log_filename: file name used for detailed population logging.
         early_stop_fitness_threshold: if set, stop evolution early when the best
             training fitness is less than or equal to this threshold. Checked after
-            each generation in fine mode, or after each block in hybrid mode.
+            each generation in fine mode, or after each block in coarse-grained mode.
         output_path: directory where outputs are saved.
         batch_size: maximum number of individuals sent to each Ray fitness task.
-            Smaller batches allow finer load balancing but create more tasks.
-        num_cpus: CPUs requested per Ray fitness task, not the total CPU limit
-            for the run. Hybrid island coordinators request zero CPUs so they
-            do not reserve resources needed by their fitness tasks.
+            Smaller batches allow finer load balancing but create more tasks. In
+            coarse-grained mode it applies only to the initial population.
+        num_cpus: CPUs requested per Ray fitness task or per coarse-grained island
+            task, not the total CPU limit for the run.
         max_calls: maximum calls to a Ray remote function per worker before that
             worker exits. The default is ``0``, meaning unlimited calls.
         custom_logger: user-defined logging function called with the best individuals.
         multiprocessing: whether to use Ray for parallel fitness evaluation
             (default ``True``). If ``False``, evolution and fitness evaluation run
-            locally and hybrid island execution is disabled.
+            locally and coarse-grained island execution is disabled.
         coarse_grained_islands: selects the island-parallel strategy (only takes
             effect when ``multiprocessing`` is enabled with more than one island).
             Pass this option directly to the constructor; ``load_config_data``
             does not forward it from YAML. Accepts:
 
-            - ``False`` / ``"fine"`` (default): master-worker. Variation runs on the
-              driver; the fitness of all islands' individuals is pooled into one
-              globally load-balanced Ray queue. Statistics, validation and early
-              stopping checks occur after each generation.
-            - ``True`` / ``"hybrid"``: each island runs as a lightweight coordinator
-              that evolves it for ``mig_freq`` generations at a time (variation and
-              the generational loop run on the coordinator), fanning each generation's
-              fitness batch out across the whole cluster. This removes the
-              per-generation global barrier and parallelizes variation while still
-              sharing the cluster's fitness workers. Statistics, validation,
-              logging and early stopping checks occur after each block, including
-              a final partial block. Migration occurs only at multiples of
-              ``mig_freq``. This mode does not support ``preprocess_args``.
-              It can help when generation synchronization or driver-side variation
-              is costly, but adds overhead from nested Ray tasks.
+            - ``False`` (default): master-worker. Variation runs on the driver; the
+              fitness of all islands' individuals is pooled into one globally
+              load-balanced Ray queue. Statistics, validation and early stopping
+              checks occur after each generation.
+            - ``True``: each island runs as one Ray task that evolves it for
+              ``mig_freq`` generations at a time, with variation and fitness inside
+              the task, so at most one core per island is used at a time (with the
+              default ``num_cpus``). Statistics, validation, logging and early
+              stopping checks occur after each block, including a final partial
+              block. Migration occurs only at multiples of ``mig_freq``. This mode
+              does not support ``preprocess_args``.
     """
 
     def __init__(
@@ -414,7 +190,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         max_calls: int = 0,
         custom_logger: Callable = None,
         multiprocessing: bool = True,
-        coarse_grained_islands: bool | str = False,
+        coarse_grained_islands: bool = False,
     ):
         super().__init__()
         self.pset_config = pset_config
@@ -741,8 +517,8 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             # Build a lean copy of the toolbox for the object store, excluding the
             # ``individual`` and ``population`` operators. These embed the
             # ``creator.Individual`` class, which Ray serializes *by value*; shipping
-            # it to a worker that already defines the class (e.g. via the hybrid
-            # setup hook) raises a metaclass conflict. Fitness evaluation and the
+            # it to a worker that already defines the class (e.g. by importing
+            # ``flex.gp.islands``) raises a metaclass conflict. Fitness evaluation and the
             # variation operators only need compile/clone/select/mate/mutate, so the
             # lean toolbox is sufficient for both strategies.
             lean_toolbox = base.Toolbox()
@@ -751,7 +527,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
                     continue
                 setattr(lean_toolbox, name, getattr(toolbox, name))
             toolbox_ref = ray.put(lean_toolbox)
-            # keep a handle to the shared toolbox for hybrid island tasks
+            # keep a handle to the shared toolbox for coarse-grained island tasks
             self._toolbox_ref = toolbox_ref
             toolbox.register(
                 "map", mapper, toolbox_ref=toolbox_ref, batch_size=self.batch_size
@@ -790,6 +566,8 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             or self.mig_freq <= 0
         ):
             raise ValueError("mig_freq must be a positive integer.")
+        if not isinstance(self.coarse_grained_islands, bool):
+            raise ValueError("coarse_grained_islands must be True or False.")
         if self.generations < 1:
             raise ValueError("generations must be a positive integer.")
         if self.validate and X_val is None:
@@ -1053,41 +831,17 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
 
         return num_evals
 
-    def _use_hybrid_islands(self):
-        """Whether to use the hybrid island-parallel strategy.
+    def __evolve_coarse_islands(self, toolbox: base.Toolbox):
+        """Evolve the islands using the coarse-grained island-parallel strategy.
 
-        ``coarse_grained_islands`` selects between the fine-grained (master-worker;
-        fitness pooled globally) and hybrid (one coordinator per island, fitness
-        fanned out across the cluster) strategies. Accepts ``False``/``True`` and the
-        strings ``"fine"`` and ``"hybrid"`` (case-insensitive).
-        """
-        cg = self.coarse_grained_islands
-        if isinstance(cg, str):
-            val = cg.strip().lower()
-            if val in ("hybrid", "true"):
-                return True
-            if val in ("fine", "false", ""):
-                return False
-            raise ValueError(
-                "coarse_grained_islands must be one of False, True, 'fine' or "
-                f"'hybrid'. Got: {cg!r}"
-            )
-        return bool(cg)
+        Each island is evolved inside its own Ray task for ``mig_freq`` generations
+        at a time, including the fitness of its individuals. After each block the
+        driver gathers the populations, performs migration, records statistics, and
+        checks for early stopping. The seed of each task is drawn on the driver, so
+        a seeded driver gives a repeatable run.
 
-    def __evolve_hybrid_islands(self, toolbox: base.Toolbox):
-        """Evolve the islands using the hybrid island-parallel strategy.
-
-        Each island is evolved on its own lightweight Ray coordinator for ``mig_freq``
-        generations at a time. The coordinator runs the variation operators and the
-        generational loop locally (so islands evolve asynchronously, with no
-        per-generation global barrier), but fans each generation's fitness batch out
-        across the whole cluster. After each block the driver gathers the populations,
-        performs migration, records statistics, and checks for early stopping.
-
-        Compared to the fine-grained strategy this removes the per-generation global
-        barrier and parallelizes the variation operators, while still using every core
-        for fitness; population statistics are recorded every ``mig_freq`` generations
-        rather than every generation.
+        Population statistics are recorded every ``mig_freq`` generations rather than
+        every generation.
 
         Args:
             toolbox: the toolbox for the evolution.
@@ -1108,35 +862,31 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             "mut_prob": self.mut_prob,
             "overlapping_generation": self.overlapping_generation,
         }
+        evolve_remote = self.__get_remote(evolve_island)
 
         gen = 0
         while gen < self.generations:
             # number of generations to evolve before the next migration/sync point
             n_gens = min(self.mig_freq, self.generations - gen)
 
-            # dispatch one coordinator task per island; each evolves locally for
-            # n_gens and fans its fitness out across the cluster. Populations cross
-            # the boundary as creator-free payloads. Coordinators run at num_cpus=0
-            # so the cores stay free for the fitness sub-tasks they spawn; the
-            # toolbox ref is boxed in a list so Ray does not auto-dereference it.
+            # dispatch one task per island; each evolves its island for n_gens.
+            # Populations cross the boundary as creator-free payloads.
             futures = [
-                _evolve_island_hybrid_remote.options(num_cpus=0).remote(
-                    [_pack_individual(ind) for ind in self.__pop[i]],
-                    [self._toolbox_ref],
+                evolve_remote(
+                    random.getrandbits(32),
+                    [pack_individual(ind) for ind in self.__pop[i]],
+                    self._toolbox_ref,
                     self.fitness,
                     fitness_args,
                     self.callback_func,
                     n_gens,
                     params,
-                    self.batch_size,
-                    self.num_cpus,
-                    self.max_calls,
                 )
                 for i in range(self.num_islands)
             ]
             results = ray.get(futures)
             self.__pop = [
-                [_unpack_individual(p) for p in res[0]] for res in results
+                [unpack_individual(p) for p in res[0]] for res in results
             ]
             num_evals = sum(res[1] for res in results)
 
@@ -1369,13 +1119,8 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
 
         self.__print(" -= START OF EVOLUTION =- ")
 
-        use_hybrid = (
-            self._use_hybrid_islands()
-            and self.multiprocessing
-            and self.num_islands > 1
-        )
-        if use_hybrid:
-            self.__evolve_hybrid_islands(toolbox)
+        if self.coarse_grained_islands and self.multiprocessing and self.num_islands > 1:
+            self.__evolve_coarse_islands(toolbox)
         else:
             for gen in range(self.generations):
                 self.__cgen = gen + 1

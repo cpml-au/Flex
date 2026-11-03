@@ -19,10 +19,16 @@ def make_regressor(**kwargs):
 
 
 @pytest.mark.parametrize("frequency", [0, -1, 1.5, 5.0, True, "5", None])
-@pytest.mark.parametrize("hybrid", [False, True])
-def test_fit_rejects_invalid_migration_frequency(frequency, hybrid):
-    model = make_regressor(mig_freq=frequency, coarse_grained_islands=hybrid)
+@pytest.mark.parametrize("coarse", [False, True])
+def test_fit_rejects_invalid_migration_frequency(frequency, coarse):
+    model = make_regressor(mig_freq=frequency, coarse_grained_islands=coarse)
     with pytest.raises(ValueError, match="mig_freq must be a positive integer"):
+        model.fit(np.ones((2, 1)))
+
+
+def test_fit_rejects_non_boolean_coarse_grained_islands():
+    model = make_regressor(coarse_grained_islands="fine")
+    with pytest.raises(ValueError, match="coarse_grained_islands must be True or"):
         model.fit(np.ones((2, 1)))
 
 
@@ -41,7 +47,7 @@ def test_fit_accepts_positive_integer_frequency(frequency, monkeypatch):
     "generations, expected_migrations, expected_blocks",
     [(3, [], [3]), (10, [5, 10], [5, 5]), (12, [5, 10], [5, 5, 2])],
 )
-def test_hybrid_migrates_only_on_schedule(
+def test_coarse_islands_migrate_only_on_schedule(
     generations, expected_migrations, expected_blocks, monkeypatch
 ):
     model = make_regressor(
@@ -58,13 +64,11 @@ def test_hybrid_migrates_only_on_schedule(
 
     blocks = []
 
-    def evolve(packed_pop, toolbox_ref, fitness, args, callback, n_gens, *rest):
+    def evolve(seed, packed_pop, toolbox, fitness, args, callback, n_gens, params):
         blocks.append(n_gens)
         return packed_pop, 0
 
-    remote = Mock()
-    remote.options.return_value.remote.side_effect = evolve
-    monkeypatch.setattr(regressor, "_evolve_island_hybrid_remote", remote)
+    monkeypatch.setattr(model, "_GPSymbolicRegressor__get_remote", lambda f: evolve)
     monkeypatch.setattr(regressor.ray, "get", lambda results: results)
     migrations = []
     monkeypatch.setattr(
@@ -74,7 +78,7 @@ def test_hybrid_migrates_only_on_schedule(
     stats = Mock()
     monkeypatch.setattr(model, "_GPSymbolicRegressor__stats", stats)
 
-    model._GPSymbolicRegressor__evolve_hybrid_islands(base.Toolbox())
+    model._GPSymbolicRegressor__evolve_coarse_islands(base.Toolbox())
 
     assert migrations == expected_migrations
     assert blocks == [size for size in expected_blocks for _ in range(2)]
