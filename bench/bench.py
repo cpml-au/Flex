@@ -16,6 +16,7 @@ import ray
 
 import math
 import random
+import signal
 import time
 
 import warnings
@@ -28,6 +29,23 @@ import sympy as sp
 # silence numpy warnings (overflow, invalid values) of the evaluated models once,
 # instead of at each model evaluation
 warnings.filterwarnings("ignore")
+
+
+def simplify_with_time_limit(expr, seconds=60):
+    """Simplified SymPy expression, or expr unchanged when simplify takes longer than
+    the given number of seconds."""
+
+    def on_alarm(signum, frame):
+        raise TimeoutError
+
+    signal.signal(signal.SIGALRM, on_alarm)
+    signal.alarm(seconds)
+    try:
+        return sp.simplify(expr)
+    except TimeoutError:
+        return expr
+    finally:
+        signal.alarm(0)
 
 
 def compute_fitness_value(MSE, model_size, penalty):
@@ -204,7 +222,9 @@ def eval(problem, cfgfile, seed=42, grid_search=False, coarse_grained_islands=Tr
     best_model = best_estimator.get_best_individuals(n_ind=1)[0]
 
     try:
-        best_model_sympy = sp.simplify(best_estimator.get_best_individuals_sympy()[0])
+        best_model_sympy = simplify_with_time_limit(
+            best_estimator.get_best_individuals_sympy()[0]
+        )
         best_model_str = str(best_model_sympy)
     except Exception as exc:
         print(
