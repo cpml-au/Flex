@@ -18,8 +18,9 @@ gp:
     # kargs: "{'tournsize': 2, 'stochastic_tourn': { 'enabled': True, 'prob': [0.7, 0.3] }}"
     fun: tools.selection.selStochasticUniversalSampling
     # fun: random.sample
-    # Convert nonnegative losses to SUS weights; larger weights are preferred.
-    kargs: "{'k': self.num_individuals, 'weight_transform': lambda loss: 1.0 / (1.0 + loss)}"
+    # Raw losses are the SUS weights, so higher-loss parents are sampled more; the best of
+    # parents and offspring survive (overlapping_generation).
+    kargs: "{'k': self.num_individuals}"
   mutate:
     fun: gp.mixedMutate
     kargs: "{'expr': toolbox.expr_mut, 'pset': pset, 'prob': [0.7, 0.2, 0.1]}" # string is important
