@@ -1,6 +1,6 @@
 gp:
   num_individuals: 156 # 1000
-  generations: 140 # calibrated: ~60 s on 8 cores (taskset -c 0-7)
+  generations: 140
   multi_island:
     num_islands: 16 # 15
     migration: { "freq": 5, "frac": 0.1 }
