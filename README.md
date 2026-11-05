@@ -188,8 +188,8 @@ into a Python function. It also fits the constants of a tree (the terminals name
 by minimizing the mean squared error (MSE) with the Levenberg-Marquardt method, using
 the exact derivatives of the tree with respect to its constants, which are computed in
 forward mode in the module `flex.gp.numba_grad`. Numerical terminals
-(fixed numbers added with `pset.addTerminal`, or ephemeral constants) are evaluated
-with their values and are not fitted.
+(fixed numbers added with `pset.addTerminal`, with or without a name, or ephemeral
+constants) are evaluated with their values and are not fitted.
 
 Per-tree functions, to be called inside your own fitness, score and predict functions
 (`pset` is the primitive set; its i-th argument reads the i-th column of `X`):

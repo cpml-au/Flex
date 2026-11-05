@@ -661,3 +661,21 @@ def test_numerical_terminals():
 
     MSE, consts = fit_mse(tree, pset, X, y)
     assert np.allclose(consts, [3.0]) and MSE < 1e-20
+
+
+def test_named_numerical_terminal():
+    # a terminal added with a name is evaluated with its value and not fitted
+    pset, toolbox = make_pset(1)
+    pset.addTerminal(2.5, float, "k")
+    tree = gp.PrimitiveTree.from_string("add(mul(c, x), k)", pset)
+    X = np.linspace(0.1, 1.0, 20).reshape(-1, 1)
+    y = 3.0 * X[:, 0] + 2.5
+
+    compiled, num_consts = compile_individual_with_consts(tree, toolbox)
+    assert num_consts == 1
+    consts = np.array([1.7])
+    assert np.allclose(predict_tree(tree, pset, X, consts), compiled(X[:, 0], consts))
+    assert np.isclose(mse(tree, pset, X, y, [3.0]), 0.0)
+
+    MSE, consts = fit_mse(tree, pset, X, y)
+    assert np.allclose(consts, [3.0]) and MSE < 1e-20

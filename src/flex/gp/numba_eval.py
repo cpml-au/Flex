@@ -38,7 +38,7 @@ from flex.gp.numba_primitives import (
 )
 
 
-def encode(tree, arg_names, special_term_name="c"):
+def encode(tree, arg_names, special_term_name="c", context=None):
     """Encodes a tree for the interpreter.
 
     Args:
@@ -48,6 +48,8 @@ def encode(tree, arg_names, special_term_name="c"):
         special_term_name: name of the constant terminal; the i-th constant terminal
             (in prefix order) reads the i-th entry of the constants. The other
             terminals whose value is not an argument name are numerical terminals.
+        context: values of the terminals added with a name (``pset.context``), needed
+            when the tree has any.
 
     Returns:
         the opcodes and the leaf indices (integer arrays), the values of the
@@ -66,9 +68,12 @@ def encode(tree, arg_names, special_term_name="c"):
             ops[i] = CONST
             idx[i] = num_consts
             num_consts += 1
-        elif isinstance(node.value, str):
+        elif node.value in arg_index:
             ops[i] = VAR
             idx[i] = arg_index[node.value]
+        elif isinstance(node.value, str):
+            ops[i] = NUM
+            nums[i] = context[node.value]
         else:
             ops[i] = NUM
             nums[i] = node.value
@@ -237,7 +242,7 @@ def fit_mse(tree, pset, X, y, bounds=(-5.0, 5.0), max_iter=8):
         the MSE (inf or nan if the tree is not finite on the data) and the fitted
         constants (empty array if the tree has none).
     """
-    ops, idx, nums, num_consts = encode(tree, pset.arguments)
+    ops, idx, nums, num_consts = encode(tree, pset.arguments, context=pset.context)
     y = np.ravel(y)
     if num_consts == 0:
         return sse(ops, idx, nums, X, y, np.empty(0)) / len(y), np.empty(0)
@@ -251,7 +256,7 @@ def fit_mse(tree, pset, X, y, bounds=(-5.0, 5.0), max_iter=8):
 
 def mse(tree, pset, X, y, consts=()):
     """MSE of a tree with the given constants on the data X (samples x features), y."""
-    ops, idx, nums, num_consts = encode(tree, pset.arguments)
+    ops, idx, nums, num_consts = encode(tree, pset.arguments, context=pset.context)
     if len(consts) != num_consts:
         raise ValueError(f"the tree has {num_consts} constants, got {len(consts)}")
     y = np.ravel(y)
@@ -260,7 +265,7 @@ def mse(tree, pset, X, y, consts=()):
 
 def predict_tree(tree, pset, X, consts=()):
     """Values of a tree with the given constants on the data X (samples x features)."""
-    ops, idx, nums, num_consts = encode(tree, pset.arguments)
+    ops, idx, nums, num_consts = encode(tree, pset.arguments, context=pset.context)
     if len(consts) != num_consts:
         raise ValueError(f"the tree has {num_consts} constants, got {len(consts)}")
     return predict(ops, idx, nums, X, np.asarray(consts, dtype=float))
