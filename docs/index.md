@@ -1,7 +1,7 @@
 # Flex
 
-[![Documentation Status](https://img.shields.io/badge/docs-ready-brightgreen)]()
-[![License](https://img.shields.io/badge/license-MIT-blue)]()
+[![Documentation Status](https://readthedocs.org/projects/flexgp/badge/?version=latest)](https://flexgp.readthedocs.io/en/latest/?badge=latest)
+[![License](https://img.shields.io/badge/license-MIT-blue)](https://github.com/cpml-au/Flex/blob/master/LICENSE.txt)
 
 Flex is a `python` library for flexible symbolic regression and evolutionary computation.  
 It is designed for researchers and engineers who want to experiment with **genetic programming**, **symbolic regression**, and **differential equation discovery** in a modular, high-performance framework.
@@ -14,7 +14,6 @@ This documentation covers installation, usage, API references, and tutorials to 
 :maxdepth: 2
 
 Overview <readme>
-License <license>
 Module Reference <api/modules>
 Tutorials <tutorials>
 ```

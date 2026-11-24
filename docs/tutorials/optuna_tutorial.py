@@ -16,7 +16,7 @@ from sklearn.model_selection import RepeatedKFold, cross_val_score
 import optuna
 from optuna.samplers import GridSampler
 
-# Optuna tutorial. We use the same example of simple_sr.ipynb
+# Optuna tutorial. We use the same example of sr_intro.ipynb
 
 # set up number of cpus per ray worker
 num_cpus = 1

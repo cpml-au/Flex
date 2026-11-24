@@ -21,6 +21,8 @@ dependencies:
   - yaml
   # Required by dctkit.math.opt.optctrl, including when using the pygmo solver.
   - petsc4py
+  # Required by nbsphinx to convert the notebooks.
+  - pandoc
   - pip
   - pip:
       - nbsphinx

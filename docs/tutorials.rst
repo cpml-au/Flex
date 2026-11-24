@@ -5,6 +5,6 @@ Tutorials
    :maxdepth: 1
    :glob:
 
-   tutorials/simple_sr
+   tutorials/sr_intro
    tutorials/sr_dec
    tutorials/optuna
