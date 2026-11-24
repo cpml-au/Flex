@@ -6,7 +6,9 @@ minimizing the mean squared error with the Levenberg-Marquardt method. The metho
 the exact derivatives of the tree with respect to its constants, which are computed in
 forward mode by the module `flex.gp.numba_grad`. The fit starts from random values,
 uniformly distributed within `bounds`, whose generator is seeded with a hash of the
-tree.
+tree, so a given tree always starts from the same values, in serial and in parallel
+runs. If a derivative is not finite at some data point, the fit stops and returns the
+constants reached so far.
 
 The derivatives at points where the differentiation rules are not defined follow these
 conventions:

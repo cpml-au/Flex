@@ -77,126 +77,23 @@ process the results using the `results/process_results.ipynb` notebook.
 
 ## Usage
 
-The fastest way to solve a symbolic regression problem with _Flex_ is to use the
-ready-made functions of the module `flex.gp.numba_eval`, which evaluate the trees with a
-numba-compiled interpreter. These functions support the trees built from the primitives
-of `numpy_primitives`. For other primitives, or to define a different fitness, write
-your own functions as described in the section _Custom fitness, prediction and score
-functions_ below.
+Setting up a symbolic regression problem in _Flex_ involves two steps:
 
-### Symbolic regression with the numba functions
-
-The numba-compiled interpreter evaluates a tree directly, without compiling it into a
-Python function. It also fits the constants of the tree (the terminals named `c`) by
-minimizing the mean squared error (MSE) with the Levenberg-Marquardt method, using the
-exact derivatives of the tree with respect to its constants, which are computed in
-forward mode in the module `flex.gp.numba_grad`. Numerical terminals (fixed numbers
-added with `pset.addTerminal`, with or without a name, or ephemeral constants) are
-evaluated with their values and are not fitted.
-
-The module provides four functions, each passed to the `GPSymbolicRegressor` argument
-written in parentheses:
-
-- `fitness_batch` (`fitness`): the fitness of an individual is its MSE after fitting its
-  constants, plus `parsimony` times its size (number of nodes plus number of constants);
-  it is 1e8 if the MSE is not finite. The fit keeps the constants within `bounds` and
-  performs at most `max_iter` iterations. It starts from random values, uniformly
-  distributed within `bounds`, whose generator is seeded with a hash of the tree, so a
-  given tree always starts from the same values, in serial and in parallel runs. If a
-  derivative is not finite at some data point, the fit stops and returns the constants
-  reached so far;
-- `assign_attributes` (`callback_func`): stores the fitness and the fitted constants on
-  each individual (`ind.consts`);
-- `score_batch` (`score_func`) and `predict_batch` (`predict_func`): MSE and
-  predictions of an individual with its stored constants. Since lower MSE means a
-  better model, `score_batch` is suited to the `score` method but not to validation
-  (`validate=True`), which requires a score where higher is better.
-
-The options `bounds` (default `(-5.0, 5.0)`), `max_iter` (default 8) and `parsimony`
-(default 0) of `fitness_batch` are set through the `common_data` argument of
-`GPSymbolicRegressor`:
-
-```python
-from deap import gp
-from flex.gp.numba_eval import (
-    assign_attributes, fitness_batch, predict_batch, score_batch
-)
-from flex.gp.primitives import add_primitives_to_pset_from_dict
-from flex.gp.regressor import GPSymbolicRegressor
-import ray
-
-# primitive set with one input variable, x
-pset = gp.PrimitiveSetTyped("MAIN", [float], float)
-pset.renameArguments(ARG0="x")
-primitives = {
-    "imports": {"flex.gp.numpy_primitives": ["numpy_primitives"]},
-    "used": [
-        {"name": "add", "dimension": None, "rank": None},
-        {"name": "mul", "dimension": None, "rank": None},
-        {"name": "sin", "dimension": None, "rank": None},
-    ],
-}
-pset = add_primitives_to_pset_from_dict(pset, primitives)
-# terminal whose values are fitted by fitness_batch
-pset.addTerminal(object, float, "c")
-
-# load datasets...
-
-gpsr = GPSymbolicRegressor(
-    pset_config=pset,
-    fitness=fitness_batch,
-    score_func=score_batch,
-    predict_func=predict_batch,
-    callback_func=assign_attributes,
-    common_data={"parsimony": 1e-4, "max_iter": 8},
-    num_individuals=200,
-    num_islands=4,
-    generations=50,
-    batch_size=50,
-)
-
-# run the symbolic regression
-gpsr.fit(X_train, y_train)
-
-# predictions and MSE of the best model found during the run on the test dataset
-pred_test = gpsr.predict(X_test)
-mse_test = gpsr.score(X_test, y_test)
-
-ray.shutdown()
-```
-
-The complete script is `examples/simple_sr_numba.py`. The configuration of
-`GPSymbolicRegressor` can be specified via the arguments of its constructor (see the API
-docs), or loaded from a YAML file:
-
-```python
-regressor_params, config_file_data = load_config_data("simple_sr.yaml")
-pset = add_primitives_to_pset_from_dict(pset, config_file_data["gp"]["primitives"])
-gpsr = GPSymbolicRegressor(pset_config=pset, ..., **regressor_params)
-```
-
-The derivatives of the trees at points where the differentiation rules are not defined,
-such as `sqrt(mul(c, x))` at `x = 0`, follow conventions that are described in the
-[documentation](https://flexgp.readthedocs.io/en/latest/constant_fitting.html), together
-with their effect on the fit.
-
-### Custom fitness, prediction and score functions
-
-The functions that return the **prediction** and the **fitness** of the individuals
-**must** have at least the following arguments in the first three positions:
-
-- the list of trees to be evaluated by the current worker;
-- the `toolbox` object used to compile the individual trees into callable functions;
-- the dataset features needed for the evaluation of the individuals. The name of the
-  argument **must** be `X`.
+1. Define the functions that return the **prediction** and the **fitness**
+   associated to an individual. These functions **must** have at least the following
+   arguments in the first three positions:
+   - the list of trees to be evaluated by the current worker;
+   - the `toolbox` object used to compile the individual trees into callable functions;
+   - the dataset features needed for the evaluation of the individuals. The name of the
+     argument **must** be `X`.
 
 Additionally, the fourth argument of the **fitness** function **must** be the dataset
 labels, called `y`. For unsupervised problems, `None` must be passed as a `y` argument
 to the fit method of the regressor, while the `y` argument of the fitness function must
 be dropped. Any additional arguments can be set using the `common_data` argument of the
-`GPSymbolicRegressor` object. The entries of `common_data` are passed as keyword
-arguments to the fitness, predict and score functions, so each of them must accept all
-of them.
+`GPSymbolicRegressor` object (see below). The entries of `common_data` are passed as
+keyword arguments to the fitness, predict and score functions, so each of them must
+accept all of them.
 
 ```python
 def predict(individuals_batch, toolbox, X, penalty):
@@ -232,39 +129,90 @@ score is also computed on it at each generation and the maximum is reported as t
 validation score, so a higher score must mean a better model (e.g. $R^2$, or the
 negative of an error).
 
-The functions are then passed to `GPSymbolicRegressor`:
-
-```python
-gpsr = GPSymbolicRegressor(
-    pset_config=pset,
-    fitness=fitness,
-    score_func=score,
-    predict_func=predict,
-    common_data={"penalty": penalty},
-    # ...
-)
-```
-
 Inside these functions, the trees can be evaluated in two ways:
 
-- with the per-tree functions of `flex.gp.numba_eval` (`pset` is the primitive set; its
-  i-th argument reads the i-th column of `X`):
-  - `fit_mse(tree, pset, X, y, bounds=(-5.0, 5.0), max_iter=8)` fits the constants as
-    `fitness_batch` does, and returns the MSE and the fitted constants;
+- by compiling them into Python functions with `compile_individuals` or
+  `compile_individual_with_consts` of `flex.gp.util`, as in the example above. This
+  works with any primitives;
+- with the numba-compiled interpreter of `flex.gp.numba_eval`, which evaluates a tree
+  directly, without compiling it into a Python function, and is the fastest option. It
+  supports the trees built from the primitives of `numpy_primitives`. Its functions take
+  the primitive set `pset` of the tree, whose i-th argument reads the i-th column of `X`:
+  - `fit_mse(tree, pset, X, y, bounds=(-5.0, 5.0), max_iter=8)` fits the constants of
+    the tree (the terminals named `c`), keeping them within `bounds`, and returns the
+    mean squared error (MSE) and the fitted constants. The fit minimizes the MSE with
+    the Levenberg-Marquardt method, using the exact derivatives of the tree with respect
+    to its constants, and is described in the
+    [documentation](https://flexgp.readthedocs.io/en/latest/constant_fitting.html);
   - `mse(tree, pset, X, y, consts)` returns the MSE of the tree with the given
     constants;
   - `predict_tree(tree, pset, X, consts)` returns the values of the tree with the given
     constants.
 
-  The script `examples/simple_sr.py` uses `mse` and `predict_tree` in this way;
-- by compiling the trees into Python functions with `compile_individuals` or
-  `compile_individual_with_consts` of `flex.gp.util`, as in the example above, which
-  works with any primitives.
+  Numerical terminals (fixed numbers added with `pset.addTerminal`, with or without a
+  name, or ephemeral constants) are evaluated with their values and are not fitted.
 
-### Parallelization strategies
+The module `flex.gp.numba_eval` also provides predefined batch functions, which can be
+passed to `GPSymbolicRegressor` in place of your own functions (the corresponding
+argument of `GPSymbolicRegressor` is written in parentheses):
 
-The two strategies for running the islands in parallel (`coarse_grained_islands`) are
-described in the [documentation](https://flexgp.readthedocs.io/en/latest/parallelization.html).
+- `fitness_batch` (`fitness`): the fitness of an individual is its MSE after fitting its
+  constants with `fit_mse`, plus `parsimony` times its size (number of nodes plus
+  number of constants); it is 1e8 if the MSE is not finite. The options `bounds`,
+  `max_iter` and `parsimony` (default 0) are set through `common_data`;
+- `assign_attributes` (`callback_func`): stores the fitness and the fitted constants on
+  each individual (`ind.consts`);
+- `score_batch` (`score_func`) and `predict_batch` (`predict_func`): MSE and
+  predictions of an individual with its stored constants. Since lower MSE means a
+  better model, `score_batch` is suited to the `score` method but not to validation
+  (`validate=True`), which requires a score where higher is better.
+
+2. Set up and solve the symbolic regression problem. The configuration of the
+   `GPSymbolicRegressor` object can be specified via the arguments of its constructor
+   (see the API docs), or loaded from a YAML file.
+
+```python
+yamlfile = "simple_sr.yaml"
+filename = os.path.join(os.path.dirname(__file__), yamlfile)
+
+regressor_params, config_file_data = load_config_data(filename)
+
+# pset = gp.PrimitiveSetTyped(...)
+# pset.renameArguments(ARG0="x")
+
+pset = add_primitives_to_pset_from_dict(
+    pset, config_file_data["gp"]["primitives"]
+)
+
+# define extra common arguments of fitness, predict and score functions
+penalty = config_file_data["gp"]["penalty"]
+common_data = {"penalty": penalty}
+
+# load datasets...
+
+gpsr = GPSymbolicRegressor(
+    pset_config=pset,
+    fitness=fitness,
+    score_func=score,
+    predict_func=predict,
+    common_data=common_data,
+    print_log=True,
+    batch_size=100,
+    **regressor_params
+)
+
+# run the symbolic regression
+gpsr.fit(X_train, y_train)
+
+# compute the prediction on the test dataset given by the best model found during the SR
+pred_test = gpsr.predict(X_test)
+
+ray.shutdown()
+```
+
+Complete example scripts can be found in the `examples` directory: `simple_sr.py`
+defines its own functions, which evaluate the trees with the numba functions `mse` and
+`predict_tree`, while `simple_sr_numba.py` uses the predefined batch functions.
 
 ## Citing
 
