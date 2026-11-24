@@ -14,6 +14,8 @@ This documentation covers installation, usage, API references, and tutorials to 
 :maxdepth: 2
 
 Overview <readme>
+Parallelization <parallelization>
+Constant fitting <constant_fitting>
 Module Reference <api/modules>
 Tutorials <tutorials>
 ```
