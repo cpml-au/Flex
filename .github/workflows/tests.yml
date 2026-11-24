@@ -4,30 +4,39 @@ on: [push, pull_request]
 jobs:
   build:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: ['3.12']
+    # Login shell, so that the conda environment is active in every step
+    defaults:
+      run:
+        shell: bash -el {0}
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
-    # Use the dedicated Conda action to handle the solver and shell initialization
-    - name: Set up Miniconda
+    - name: Set up Miniforge
       uses: conda-incubator/setup-miniconda@v3
       with:
-        python-version: ${{ matrix.python-version }}
-        mamba-version: "*"
-        channels: conda-forge,defaults
-        channel-priority: strict
-        activate-environment: test-env
+        miniforge-version: latest
+        activate-environment: flex
+        conda-remove-defaults: true
+
+    # The environment is rebuilt only when environment.yaml changes
+    - name: Cache the conda environment
+      id: cache
+      uses: actions/cache@v4
+      with:
+        path: ${{ env.CONDA }}/envs
+        key: conda-${{ runner.os }}-${{ hashFiles('environment.yaml') }}
+
+    - name: Create the conda environment
+      if: steps.cache.outputs.cache-hit != 'true'
+      run: conda env update -n flex -f environment.yaml
 
     - name: Install dependencies
       run: |
         sudo apt-get -y install libglu1
-        # Install tox and plugins into the active conda environment
-        python -m pip install tox tox-conda flake8 setuptools
+        python -m pip install -e .[testing] flake8
 
     - name: Linting with flake8
       run: flake8
 
-    - name: Running tests with tox
-      run: tox
+    - name: Running tests
+      run: pytest
