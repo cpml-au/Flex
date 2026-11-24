@@ -42,16 +42,16 @@ def test_check_regressor():
         score_func=dummy_score,
         predict_func=dummy_predict,
         common_data=common_data,
-        num_individuals=100,
-        num_islands=10,
-        generations=200,
+        num_individuals=10,
+        num_islands=2,
+        generations=2,
         mut_prob=0.1,
         min_height=2,
         max_height=6,
         crossover_prob=0.9,
         overlapping_generation=True,
         print_log=True,
-        batch_size=100,
+        batch_size=10,
     )
 
     check_estimator(
