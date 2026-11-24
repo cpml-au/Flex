@@ -137,8 +137,6 @@ def sse(ops, idx, nums, X, y, consts):
     return total
 
 
-
-
 @cached_njit()
 def _solve_spd(A, b):
     """Solution of A x = b for a symmetric positive definite A (Cholesky); returns

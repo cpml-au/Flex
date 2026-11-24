@@ -249,8 +249,8 @@ def test_fit_with_pow_at_zero_base():
 
 
 def test_fit_stops_at_singular_points():
-    # where a derivative is not finite the fit returns the constants reached so far, here
-    # the starting ones, with their (finite) sum of squared errors
+    # where a derivative is not finite the fit returns the constants reached so far,
+    # here the starting ones, with their (finite) sum of squared errors
     pset, _ = make_pset(1)
     for number in [0.5, 1.0]:
         pset.addTerminal(number, float)
@@ -464,10 +464,10 @@ def test_kink_with_zero_inner_derivative():
 
 
 def test_zero_factor_with_a_nonzero_limit():
-    # x / (x / (c1 - c2)) = c1 - c2 has derivative 1 with respect to c1, but with equal
-    # constants the chain rule has the product 0 * inf, whose limit here is not zero: the
-    # computed derivative is 0. The fit is protected, since a step is accepted only if
-    # the error of the values of the tree decreases
+    # x / (x / (c1 - c2)) = c1 - c2 has derivative 1 with respect to c1, but with
+    # equal constants the chain rule has the product 0 * inf, whose limit here is not
+    # zero: the computed derivative is 0. The fit is protected, since a step is
+    # accepted only if the error of the values of the tree decreases
     pset, _ = make_pset(1)
     tree = gp.PrimitiveTree.from_string("div(x, div(x, sub(c, c)))", pset)
     ops, idx, nums, k = encode(tree, pset.arguments)
@@ -521,8 +521,8 @@ def test_derivatives_near_a_pole_and_at_large_arguments():
     _, _, JTr = sse_normal_equations(ops, idx, nums, X, y, np.ones(k))
     assert np.isclose(JTr[0], 1.0 / (1.0 + x), rtol=1e-12)
 
-    # exp(40) has a rounding error larger than the period of sin: the derivative (and the
-    # value) of the tree are finite but not accurate, and the fit does not stop
+    # exp(40) has a rounding error larger than the period of sin: the derivative (and
+    # the value) of the tree are finite but not accurate, and the fit does not stop
     tree = gp.PrimitiveTree.from_string("sin(exp(mul(c, x)))", pset)
     ops, idx, nums, k = encode(tree, pset.arguments)
     X = np.array([[1.0], [40.0]])

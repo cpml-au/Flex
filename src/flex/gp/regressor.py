@@ -518,9 +518,9 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             # ``individual`` and ``population`` operators. These embed the
             # ``creator.Individual`` class, which Ray serializes *by value*; shipping
             # it to a worker that already defines the class (e.g. by importing
-            # ``flex.gp.islands``) raises a metaclass conflict. Fitness evaluation and the
-            # variation operators only need compile/clone/select/mate/mutate, so the
-            # lean toolbox is sufficient for both strategies.
+            # ``flex.gp.islands``) raises a metaclass conflict. Fitness evaluation and
+            # the variation operators only need compile/clone/select/mate/mutate, so
+            # the lean toolbox is sufficient for both strategies.
             lean_toolbox = base.Toolbox()
             for name in vars(toolbox):
                 if name in ("individual", "population"):
@@ -1119,7 +1119,11 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
 
         self.__print(" -= START OF EVOLUTION =- ")
 
-        if self.coarse_grained_islands and self.multiprocessing and self.num_islands > 1:
+        if (
+            self.coarse_grained_islands
+            and self.multiprocessing
+            and self.num_islands > 1
+        ):
             self.__evolve_coarse_islands(toolbox)
         else:
             for gen in range(self.generations):
