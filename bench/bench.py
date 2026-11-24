@@ -7,12 +7,12 @@ from flex.gp.numba_eval import assign_attributes, predict_batch, score_batch
 from flex.gp.util import (
     get_features_batch,
     load_config_data,
-    safe_r2_score,
     sanitize_array_for_metrics,
 )
 from flex.gp.primitives import add_primitives_to_pset_from_dict
 import numpy as np
 import ray
+from sklearn.metrics import r2_score
 
 import math
 import random
@@ -46,11 +46,6 @@ def simplify_with_time_limit(expr, seconds=60):
         return expr
     finally:
         signal.alarm(0)
-
-
-def compute_fitness_value(MSE, model_size, penalty):
-    # Evolution fitness: only MSE + linear size regularization.
-    return MSE + penalty["reg_param"] * model_size
 
 
 def eval_MSE_and_fit_constants_numba(tree, toolbox, X, y):
@@ -94,11 +89,7 @@ def compute_attributes(
                 age_penalty = penalty.get("age_reg_param", 0.0) * getattr(
                     tree, "age", 0
                 )
-                fitness_value = compute_fitness_value(
-                    MSE=MSE,
-                    model_size=model_size,
-                    penalty=penalty,
-                )
+                fitness_value = MSE + penalty["reg_param"] * model_size
                 fitness = (
                     fitness_scale
                     * (
@@ -256,7 +247,7 @@ def eval(problem, cfgfile, seed=42, grid_search=False, coarse_grained_islands=Tr
     y_test_safe = sanitize_array_for_metrics(y_test)
     u_best_safe = sanitize_array_for_metrics(u_best)
     MSE = np.mean((u_best_safe - y_test_safe) ** 2)
-    r2_test = safe_r2_score(y_test_safe, u_best_safe)
+    r2_test = r2_score(y_test_safe, u_best_safe)
     print("MSE on the test set = ", MSE)
     print("R^2 on the test set = ", r2_test)
 
@@ -271,7 +262,7 @@ def eval(problem, cfgfile, seed=42, grid_search=False, coarse_grained_islands=Tr
     y_train_safe = sanitize_array_for_metrics(y_train_scaled)
     pred_train_safe = sanitize_array_for_metrics(pred_train)
     MSE = np.mean((pred_train_safe - y_train_safe) ** 2)
-    r2_train = safe_r2_score(y_train_safe, pred_train_safe)
+    r2_train = r2_score(y_train_safe, pred_train_safe)
     print("MSE on the training set = ", MSE)
     print("R^2 on the training set = ", r2_train)
 

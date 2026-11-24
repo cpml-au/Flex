@@ -3,7 +3,6 @@ from itertools import chain
 import ray
 import numpy as np
 from deap import gp
-from sklearn.metrics import r2_score
 from flex.gp.cochain_primitives import Dimension, Rank
 
 
@@ -107,15 +106,6 @@ def sanitize_array_for_metrics(arr, clip_value=1e150):
     arr = np.nan_to_num(arr, nan=0.0, posinf=clip_value, neginf=-clip_value)
     arr = np.clip(arr, -clip_value, clip_value)
     return arr
-
-
-def safe_r2_score(y_true, y_pred):
-    """Robust R^2 computation that avoids crashing on bad numeric values."""
-    try:
-        return r2_score(y_true, y_pred)
-    except ValueError as exc:
-        print(f"Warning: r2_score failed ({exc}). Returning NaN.")
-        return np.nan
 
 
 def mapper(f, individuals, toolbox_ref, batch_size):
