@@ -9,7 +9,15 @@ import os
 import ray
 import random
 from numbers import Integral
-from flex.gp.util import mapper, max_func, min_func, avg_func, std_func, fitness_value
+from flex.gp.util import (
+    cached_map,
+    mapper,
+    max_func,
+    min_func,
+    avg_func,
+    std_func,
+    fitness_value,
+)
 from flex.gp.islands import evolve_island, pack_individual, unpack_individual
 from flex.gp.sympy import stringify_for_sympy
 from flex.gp.numpy_primitives import conversion_rules
@@ -142,6 +150,12 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
               stopping checks occur after each block, including a final partial
               block. Migration occurs only at multiples of ``mig_freq``. This mode
               does not support ``preprocess_args``.
+        cache_fitness: whether to evaluate the training fitness of each distinct
+            individual (by its string) only once, reusing the result for its copies.
+            Only correct when the fitness is a deterministic function of the string.
+            With the fine-grained strategy the cache lasts for the whole ``fit``; with
+            the coarse-grained strategy each island task keeps its own cache for one
+            block of ``mig_freq`` generations.
     """
 
     def __init__(
@@ -191,6 +205,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         custom_logger: Callable = None,
         multiprocessing: bool = True,
         coarse_grained_islands: bool = False,
+        cache_fitness: bool = False,
     ):
         super().__init__()
         self.pset_config = pset_config
@@ -245,6 +260,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         self.custom_logger = custom_logger
         self.multiprocessing = multiprocessing
         self.coarse_grained_islands = coarse_grained_islands
+        self.cache_fitness = cache_fitness
 
     def __sklearn_tags__(self):
         # since we are allowing cases in which y=None
@@ -610,6 +626,11 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
 
         # register functions for fitness evaluation (train/val)
         self.__register_map(toolbox)
+        # separate from ``map``, which also computes the validation scores
+        if self.cache_fitness:
+            toolbox.register("map_train", cached_map, toolbox.map, {})
+        else:
+            toolbox.register("map_train", toolbox.map)
         self.__register_fitness_func(toolbox)
         if self.validate and self.score_func is not None:
             self.__register_val_funcs(toolbox)
@@ -790,7 +811,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
                 )
                 self.preprocess_args["callback"](invalid_inds[i], preprocess_values)
 
-        fitnesses = toolbox.map(
+        fitnesses = toolbox.map_train(
             toolbox.evaluate_train, self.__flatten_list(invalid_inds)
         )
         fitnesses = self.__unflatten_list(fitnesses, [len(i) for i in invalid_inds])
@@ -861,6 +882,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             "crossover_prob": self.crossover_prob,
             "mut_prob": self.mut_prob,
             "overlapping_generation": self.overlapping_generation,
+            "cache_fitness": self.cache_fitness,
         }
         evolve_remote = self.__get_remote(evolve_island)
 
@@ -947,7 +969,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             # at most 100 rounds: with large errors, few individuals may ever get
             # below the fitness threshold
             for _ in range(100):
-                fitnesses = toolbox.map(toolbox.evaluate_train, self.__pop[i])
+                fitnesses = toolbox.map_train(toolbox.evaluate_train, self.__pop[i])
                 if self.callback_func is not None:
                     self.callback_func(self.__pop[i], fitnesses)
                 else:
@@ -1083,7 +1105,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             toolbox: the toolbox for the evolution.
         """
         for i in range(self.num_islands):
-            fitnesses = toolbox.map(toolbox.evaluate_train, self.__pop[i])
+            fitnesses = toolbox.map_train(toolbox.evaluate_train, self.__pop[i])
 
             if self.callback_func is not None:
                 self.callback_func(self.__pop[i], fitnesses)

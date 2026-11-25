@@ -14,7 +14,7 @@ from flex.gp.numpy_primitives import numpy_primitives
 from flex.gp.regressor import GPSymbolicRegressor
 
 
-def run_coarse_islands(seed):
+def run_coarse_islands(seed, cache_fitness=False):
     random.seed(seed)
     np.random.seed(seed)
 
@@ -48,9 +48,12 @@ def run_coarse_islands(seed):
         batch_size=20,
         overlapping_generation=True,
         coarse_grained_islands=True,
+        cache_fitness=cache_fitness,
     )
     model.fit(X, y)
-    return [str(ind) for ind in model.get_population_individuals()]
+    return [
+        (str(ind), ind.fitness.values) for ind in model.get_population_individuals()
+    ]
 
 
 def test_coarse_islands_repeat_with_the_same_seed():
@@ -62,3 +65,12 @@ def test_coarse_islands_repeat_with_the_same_seed():
 
     assert first == second
     assert first != third
+
+
+def test_coarse_islands_give_the_same_run_with_the_fitness_cache():
+    ray.init()
+    uncached = run_coarse_islands(1)
+    cached = run_coarse_islands(1, cache_fitness=True)
+    ray.shutdown()
+
+    assert cached == uncached

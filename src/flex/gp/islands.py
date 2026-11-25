@@ -2,7 +2,10 @@ from deap import algorithms, tools, gp, base, creator
 import numpy as np
 import ray
 import random
+from functools import partial
 from typing import List, Dict, Callable
+
+from flex.gp.util import cached_map
 
 
 def _register_creator_classes():
@@ -191,6 +194,10 @@ def evolve_island(
 
     def evaluate_fn(invalid_inds):
         return fitness_func(invalid_inds, toolbox, **data)
+
+    if params["cache_fitness"]:
+        # the cache lasts for the n_gens generations of this task
+        evaluate_fn = partial(cached_map, lambda f, inds: f(inds), {}, evaluate_fn)
 
     pop = [unpack_individual(p) for p in packed_pop]
     num_evals = 0
