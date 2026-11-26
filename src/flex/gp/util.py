@@ -117,6 +117,18 @@ def mapper(f, individuals, toolbox_ref, batch_size):
     return fitnesses
 
 
+class FitnessCache(dict):
+    """Dictionary from individual string to fitness result.
+
+    Attributes:
+        hits: number of individuals whose result was reused instead of evaluated.
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.hits = 0
+
+
 def cached_map(map_func, cache, f, individuals):
     """Maps ``f`` over the individuals, evaluating each distinct one only once.
 
@@ -125,7 +137,7 @@ def cached_map(map_func, cache, f, individuals):
 
     Args:
         map_func: function applying ``f`` to a list of individuals.
-        cache: dictionary from individual string to result.
+        cache: a ``FitnessCache``.
         f: function to evaluate.
         individuals: list of individuals.
 
@@ -138,6 +150,7 @@ def cached_map(map_func, cache, f, individuals):
         if key not in cache:
             new.setdefault(key, ind)
     cache.update(zip(new, map_func(f, list(new.values()))))
+    cache.hits += len(keys) - len(new)
     return [cache[key] for key in keys]
 
 

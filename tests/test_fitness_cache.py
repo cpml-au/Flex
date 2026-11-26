@@ -4,7 +4,13 @@ from deap import gp
 
 from flex.gp.primitives import add_primitives_to_pset_from_dict
 from flex.gp.regressor import GPSymbolicRegressor
-from flex.gp.util import cached_map, dummy_fitness, dummy_predict, dummy_score
+from flex.gp.util import (
+    FitnessCache,
+    cached_map,
+    dummy_fitness,
+    dummy_predict,
+    dummy_score,
+)
 
 X = np.ones((4, 1))
 y = np.ones(4)
@@ -47,9 +53,11 @@ def test_cached_map_evaluates_each_distinct_individual_once():
         calls.append(individuals)
         return [f(ind) for ind in individuals]
 
-    cache = {}
+    cache = FitnessCache()
     assert cached_map(map_func, cache, len, ["a", "bb", "a"]) == [1, 2, 1]
+    assert cache.hits == 1
     assert cached_map(map_func, cache, len, ["ccc", "bb", "a"]) == [3, 2, 1]
+    assert cache.hits == 3
     assert calls == [["a", "bb"], ["ccc"]]
 
 
@@ -100,3 +108,4 @@ def test_fit_evaluates_each_tree_once_and_assigns_every_fitness():
     population = model.get_population_individuals()
     assert all(ind.fitness.valid for ind in population)
     assert all(ind.fitness.values[0] == len(ind) for ind in population)
+    assert model.get_cache_hit_rate() > 0

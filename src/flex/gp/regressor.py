@@ -10,6 +10,7 @@ import ray
 import random
 from numbers import Integral
 from flex.gp.util import (
+    FitnessCache,
     cached_map,
     mapper,
     max_func,
@@ -28,7 +29,6 @@ from functools import partial
 from itertools import chain
 import numpy.typing as npt
 from jax import Array
-
 
 # reducing the number of threads launched by fitness evaluations
 os.environ["MKL_NUM_THREADS"] = "1"
@@ -152,10 +152,17 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
               does not support ``preprocess_args``.
         cache_fitness: whether to evaluate the training fitness of each distinct
             individual (by its string) only once, reusing the result for its copies.
-            Only correct when the fitness is a deterministic function of the string.
-            With the fine-grained strategy the cache lasts for the whole ``fit``; with
-            the coarse-grained strategy each island task keeps its own cache for one
-            block of ``mig_freq`` generations.
+            Only correct when the fitness depends on the string alone, and not on
+            attributes such as ``age``, on random numbers not determined by the tree, or
+            on the generation. With the fine-grained strategy the cache lasts for the
+            whole ``fit``; with the coarse-grained strategy each island task keeps its
+            own cache for one block of ``mig_freq`` generations. The speedup depends on
+            the problem: the cache saves time in proportion to the share of the
+            evaluations it answers, when the fitness evaluation dominates the run. This
+            share is high when the variation often repeats individuals, for example
+            with frequent crossover or small trees. The log then has a ``hits`` column
+            with the number of individuals of ``evals`` whose fitness came from the
+            cache, and ``get_cache_hit_rate`` returns the share for the whole evolution.
     """
 
     def __init__(
@@ -407,11 +414,13 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         """Initialize logbook to collect statistics."""
         self.__logbook = tools.Logbook()
         # Headers of fields to be printed during log
+        header = ["gen", "evals", "fitness", "size"]
+        if self.cache_fitness:
+            header.insert(2, "hits")
         if self.validate:
-            self.__logbook.header = "gen", "evals", "fitness", "size", "valid"
+            header.append("valid")
             self.__logbook.chapters["valid"].header = ("valid_score",)
-        else:
-            self.__logbook.header = "gen", "evals", "fitness", "size"
+        self.__logbook.header = header
         self.__logbook.chapters["fitness"].header = "min", "avg", "max", "std"
         self.__logbook.chapters["size"].header = "min", "avg", "max", "std"
 
@@ -449,7 +458,9 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         pop = self.__flatten_list(self.__pop)
         return self.__mstats.compile(pop)
 
-    def __stats(self, pop: List, gen: int, evals: int, toolbox: base.Toolbox):
+    def __stats(
+        self, pop: List, gen: int, evals: int, toolbox: base.Toolbox, hits: int = 0
+    ):
         """Compute and print statistics of a population.
 
         Args:
@@ -457,6 +468,7 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             gen: the generation number.
             evals: the number of the evaluations in the current generation.
             toolbox: the toolbox for the evolution.
+            hits: the number of the evaluations answered by the fitness cache.
         """
 
         # LINE_UP = '\033[1A'
@@ -470,6 +482,8 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             valid_score = self.__compute_valid_stats(pop, toolbox)
             record["valid"] = {"valid_score": valid_score}
 
+        if self.cache_fitness:
+            record["hits"] = hits
         self.__logbook.record(gen=gen, evals=evals, **record)
 
         if self.print_log:
@@ -627,8 +641,9 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
         # register functions for fitness evaluation (train/val)
         self.__register_map(toolbox)
         # separate from ``map``, which also computes the validation scores
+        self.__fitness_cache = FitnessCache()
         if self.cache_fitness:
-            toolbox.register("map_train", cached_map, toolbox.map, {})
+            toolbox.register("map_train", cached_map, toolbox.map, self.__fitness_cache)
         else:
             toolbox.register("map_train", toolbox.map)
         self.__register_fitness_func(toolbox)
@@ -907,10 +922,9 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
                 for i in range(self.num_islands)
             ]
             results = ray.get(futures)
-            self.__pop = [
-                [unpack_individual(p) for p in res[0]] for res in results
-            ]
+            self.__pop = [[unpack_individual(p) for p in res[0]] for res in results]
             num_evals = sum(res[1] for res in results)
+            num_hits = sum(res[2] for res in results)
 
             gen += n_gens
             self.__cgen = gen
@@ -925,7 +939,9 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
 
             # statistics, best individual and history (every mig_freq generations)
             best_inds = self.get_best_individuals(self.num_best_inds_str)
-            self.__stats(self.__flatten_list(self.__pop), gen, num_evals, toolbox)
+            self.__stats(
+                self.__flatten_list(self.__pop), gen, num_evals, toolbox, num_hits
+            )
 
             if self.print_log:
                 print("Best individuals of this generation:", flush=True)
@@ -1026,14 +1042,18 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
             toolbox: the toolbox for the evolution.
             cgen: current generation index.
         """
+        hits_before = self.__fitness_cache.hits
         num_evals = self.__evolve_islands(cgen, toolbox)
+        num_hits = self.__fitness_cache.hits - hits_before
 
         # select the best individuals in the current population
         # (including all islands)
         best_inds = self.get_best_individuals(self.num_best_inds_str)
 
         # compute and print population statistics (including all islands)
-        self.__stats(self.__flatten_list(self.__pop), cgen, num_evals, toolbox)
+        self.__stats(
+            self.__flatten_list(self.__pop), cgen, num_evals, toolbox, num_hits
+        )
 
         if self.print_log:
             print("Best individuals of this generation:", flush=True)
@@ -1281,6 +1301,14 @@ class GPSymbolicRegressor(RegressorMixin, BaseEstimator):
                 )
             )
         return best_sympy
+
+    def get_cache_hit_rate(self):
+        """Returns the share of the evaluations of the evolution answered by the
+        fitness cache, or 0 when ``cache_fitness`` is off."""
+        if not self.cache_fitness:
+            return 0.0
+        evals = sum(self.__logbook.select("evals"))
+        return sum(self.__logbook.select("hits")) / evals if evals else 0.0
 
     def get_train_fit_history(self):
         """Returns the training score history.
