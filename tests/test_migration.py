@@ -66,7 +66,7 @@ def test_coarse_islands_migrate_only_on_schedule(
 
     def evolve(seed, packed_pop, toolbox, fitness, args, callback, n_gens, params):
         blocks.append(n_gens)
-        return packed_pop, 0
+        return packed_pop, 0, 0
 
     monkeypatch.setattr(model, "_GPSymbolicRegressor__get_remote", lambda f: evolve)
     monkeypatch.setattr(regressor.ray, "get", lambda results: results)

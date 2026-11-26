@@ -2,7 +2,10 @@ from deap import algorithms, tools, gp, base, creator
 import numpy as np
 import ray
 import random
+from functools import partial
 from typing import List, Dict, Callable
+
+from flex.gp.util import FitnessCache, cached_map
 
 
 def _register_creator_classes():
@@ -182,7 +185,8 @@ def evolve_island(
         params: dictionary of evolution parameters.
 
     Returns:
-        a tuple ``(packed_pop, num_evals)``.
+        a tuple ``(packed_pop, num_evals, num_hits)``, with ``num_hits`` the number
+        of individuals whose fitness came from the cache.
     """
     random.seed(seed)
     np.random.seed(seed)
@@ -192,6 +196,11 @@ def evolve_island(
     def evaluate_fn(invalid_inds):
         return fitness_func(invalid_inds, toolbox, **data)
 
+    # the cache lasts for the n_gens generations of this task
+    cache = FitnessCache()
+    if params["cache_fitness"]:
+        evaluate_fn = partial(cached_map, lambda f, inds: f(inds), cache, evaluate_fn)
+
     pop = [unpack_individual(p) for p in packed_pop]
     num_evals = 0
     for _ in range(n_gens):
@@ -199,4 +208,4 @@ def evolve_island(
             pop, toolbox, evaluate_fn, callback_func, params
         )
         num_evals += evals
-    return [pack_individual(ind) for ind in pop], num_evals
+    return [pack_individual(ind) for ind in pop], num_evals, cache.hits
